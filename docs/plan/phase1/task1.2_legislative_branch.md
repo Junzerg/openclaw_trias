@@ -3,7 +3,7 @@
 > **对应 Phase 1 子项**：1.2.1 ~ 1.2.4（议长 + 激进派 + 保守派 + 辩论协议）
 > **前置依赖**：Task 1-A（Agent 基类 & RBAC）
 > **预估工作量**：1-2 个会话
-> **状态**：🔲 待开始
+> **状态**：✅ 已完成
 
 ---
 
@@ -163,14 +163,14 @@ tests/unit/
 
 ## 验收标准
 
-- [ ] `Speaker` 可接收请愿并启动辩论流程
-- [ ] `RadicalMP` 可生成提案和反驳
-- [ ] `ConservativeMP` 可生成批评和反论
-- [ ] 三个 Agent 均从 SOUL.md 加载了人设
-- [ ] 辩论引擎可跑通完整的多轮辩论循环（Mock LLM）
-- [ ] 辩论在终止条件满足时正确退出
-- [ ] RBAC 校验：立法 Agent 无法执行 EXECUTE 操作
-- [ ] 所有单测通过
+- [x] `Speaker` 可接收请愿并启动辩论流程
+- [x] `RadicalMP` 可生成提案和反驳
+- [x] `ConservativeMP` 可生成批评和反论
+- [x] 三个 Agent 均从 SOUL.md 加载了人设
+- [x] 辩论引擎可跑通完整的多轮辩论循环（Mock LLM）
+- [x] 辩论在终止条件满足时正确退出
+- [x] RBAC 校验：立法 Agent 无法执行 EXECUTE 操作
+- [x] 所有单测通过（174 tests, mypy --strict 0 errors, ruff 0 warnings）
 
 ---
 

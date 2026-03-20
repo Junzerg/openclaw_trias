@@ -7,14 +7,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from openclaw_republic.agents.base import BaseAgent
+from openclaw_republic.agents.base import BaseAgent, Branch, Permission
 
 
 class ChiefJustice(BaseAgent):
     """首席大法官 — 司法分支最高审查官。"""
 
     def __init__(self) -> None:
-        super().__init__(name="Chief Justice", role="judicial.chief_justice")
+        super().__init__(
+            name="Chief Justice",
+            role="chief_justice",
+            branch=Branch.JUDICIAL,
+            permissions={Permission.MONITOR, Permission.KILL},
+        )
 
     async def review(self, action: dict[str, Any]) -> dict[str, Any]:
         """审查行政动作是否违宪。

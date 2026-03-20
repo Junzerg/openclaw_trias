@@ -8,14 +8,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from openclaw_republic.agents.base import BaseAgent
+from openclaw_republic.agents.base import BaseAgent, Branch, Permission
 
 
 class SecretaryOfEngineering(BaseAgent):
     """工程部长 — 负责代码编写与执行。"""
 
+    _available_tools = ["CodeExecution", "Python_Interpreter", "GitHub"]
+
     def __init__(self) -> None:
-        super().__init__(name="Sec. of Engineering", role="executive.sec_engineering")
+        super().__init__(
+            name="Sec. of Engineering",
+            role="sec_engineering",
+            branch=Branch.EXECUTIVE,
+            permissions={Permission.EXECUTE},
+        )
 
     async def execute_task(self, task: dict[str, Any]) -> dict[str, Any]:
         """执行总统派发的工程任务。

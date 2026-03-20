@@ -165,8 +165,8 @@ Petition → Drafting → Debating → Voted
 
 ## 验收标准
 
-- [ ] `BaseAgent` 基类可复用，RBAC 校验有效
-- [ ] 3 个立法 Agent 可进行多轮辩论，产出结构化《执行法案》
+- [x] `BaseAgent` 基类可复用，RBAC 校验有效
+- [x] 3 个立法 Agent 可进行多轮辩论，产出结构化《执行法案》
 - [ ] Conflict Score 可计算并影响辩论流程
 - [ ] 总统可签署/否决法案
 - [ ] 工程部长和国务卿可调用对应 Skill
@@ -182,7 +182,7 @@ Phase 1 拆分为 6 个独立闭环的开发任务，按顺序执行：
 | Task | 标题 | 涵盖子项 | 预估 | 状态 |
 |------|------|---------|------|------|
 | [Task 1-A](task1.1_agent_base_rbac.md) | Agent 基类 & RBAC 权限模型 | 1.1 全部 | 1 会话 | ✅ 已完成 |
-| [Task 1-B](task1.2_legislative_branch.md) | 立法分支核心 | 1.2.1~1.2.4 | 1-2 会话 | 🔲 待开始 |
+| [Task 1-B](task1.2_legislative_branch.md) | 立法分支核心 | 1.2.1~1.2.4 | 1-2 会话 | ✅ 已完成 |
 | [Task 1-C](task1.3_conflict_score_and_act_schema.md) | Conflict Score & 法案 Schema | 1.2.5~1.2.6 | 1 会话 | 🔲 待开始 |
 | [Task 1-D](task1.4_executive_branch.md) | 行政分支 | 1.3 全部 | 1-2 会话 | 🔲 待开始 |
 | [Task 1-E](task1.5_judicial_branch.md) | 司法分支 | 1.4 全部 | 1-2 会话 | 🔲 待开始 |

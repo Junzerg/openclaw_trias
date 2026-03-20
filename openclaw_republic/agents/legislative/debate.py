@@ -1,35 +1,234 @@
 """议会辩论协议 — 多轮 Critique → Rebuttal → 共识表决。
 
-包含：分歧度 (Conflict Score) 计算、阈值判定、投票表决引擎。
+包含：辩论引擎 (DebateEngine)、投票机制 (VotingMachine)、
+以及辩论结果数据模型 (DebateRound, DebateResult, VoteRecord, VoteResult)。
+
+Conflict Score 的精确计算逻辑在 Task 1-C 中实现，
+此处使用简单文本差异占位。
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from openclaw_republic.agents.legislative.conservative_mp import ConservativeMP
+    from openclaw_republic.agents.legislative.radical_mp import RadicalMP
+    from openclaw_republic.agents.legislative.speaker import Speaker
+    from openclaw_republic.config.models import DebateConfig
+
+
+# ---------------------------------------------------------------------------
+# 投票协议 — 所有可投票的 Agent 需实现此协议
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class Voter(Protocol):
+    """可投票的 Agent 协议。"""
+
+    role: str
+
+    async def vote(self, proposal: str) -> bool:
+        """对提案投票。"""
+        ...  # pragma: no cover
+
+
+# ---------------------------------------------------------------------------
+# 数据模型
+# ---------------------------------------------------------------------------
+
+
+class DebateRound(BaseModel):
+    """单轮辩论记录。"""
+
+    round_number: int = Field(ge=1, description="辩论轮次编号")
+    proposal: str = Field(
+        description="当前轮次的立场文本（首轮为提案，后续为反驳）",
+    )
+    critique: str = Field(description="保守派批评/二次论证内容")
+    rebuttal: str = Field(default="", description="激进派反驳内容（首轮为空）")
+    conflict_score: float = Field(ge=0.0, le=100.0, description="本轮分歧度")
+
+
+class DebateResult(BaseModel):
+    """辩论最终结果。"""
+
+    petition: str = Field(description="原始选民请愿")
+    rounds: list[DebateRound] = Field(description="各轮辩论记录")
+    final_proposal: str = Field(description="最终提案文本")
+    consensus_reached: bool = Field(description="是否达成共识")
+    final_conflict_score: float = Field(ge=0.0, le=100.0, description="最终分歧度")
+
+
+class VoteRecord(BaseModel):
+    """单票记录。"""
+
+    voter_role: str = Field(description="投票者角色名")
+    vote: bool = Field(description="True=赞成, False=反对")
+
+
+class VoteResult(BaseModel):
+    """投票结果汇总。"""
+
+    proposal: str = Field(description="被表决的提案")
+    records: list[VoteRecord] = Field(description="投票记录")
+    ayes: int = Field(ge=0, description="赞成票数")
+    nays: int = Field(ge=0, description="反对票数")
+    passed: bool = Field(description="是否通过（简单多数制）")
+
+
+# ---------------------------------------------------------------------------
+# DebateEngine
+# ---------------------------------------------------------------------------
 
 
 class DebateEngine:
-    """议会辩论引擎 — 管理辩论流程与表决。"""
+    """议会辩论引擎 — 管理辩论流程。
 
-    def compute_conflict_score(self, arguments: list[str]) -> float:
-        """计算当前辩论的分歧度。
+    负责：辩论轮次管理、发言调度、conflict_score 计算、
+    终止条件判定。
+    """
+
+    def __init__(self, config: DebateConfig) -> None:
+        """初始化辩论引擎。
 
         Args:
-            arguments: 各方论点列表。
+            config: 辩论规则配置（来自 constitution.yaml）。
+        """
+        self._config = config
+
+    def compute_conflict_score(self, proposal: str, critique: str) -> float:
+        """计算当前辩论的分歧度（占位实现）。
+
+        简单实现：基于提案和批评文本长度差异产生分歧度。
+        真正的 NLP 计算逻辑将在 Task 1-C 中实现。
+
+        Args:
+            proposal: 提案文本。
+            critique: 批评文本。
 
         Returns:
             分歧度评分 (0.0 ~ 100.0)。
         """
-        raise NotImplementedError
+        if not proposal and not critique:
+            return 0.0
+        # 占位：用文本长度差异比率作为粗略分歧度
+        total = len(proposal) + len(critique)
+        diff = abs(len(proposal) - len(critique))
+        score = min(100.0, (diff / total) * 100.0 + 30.0)
+        return round(score, 2)
 
-    async def run_debate(self, topic: str, max_rounds: int = 5) -> dict[str, Any]:
-        """执行一轮完整辩论。
+    async def run_debate(
+        self,
+        speaker: Speaker,
+        radical: RadicalMP,
+        conservative: ConservativeMP,
+        petition: str,
+    ) -> DebateResult:
+        """执行完整辩论流程。
+
+        流程：
+        1. 激进派针对请愿提出提案
+        2. 保守派对提案进行 critique
+        3. 计算 conflict_score
+        4. 如未达共识且未达最大轮次：
+           激进派 rebut → 保守派再 critique → 重新计算
+        5. 共识或轮次耗尽时终止
 
         Args:
-            topic: 辩论议题。
-            max_rounds: 最大辩论轮次。
+            speaker: 议长（用于事件发布，当前未使用）。
+            radical: 激进派议员。
+            conservative: 保守派议员。
+            petition: 选民请愿内容。
 
         Returns:
-            辩论结果，包含最终共识与投票记录。
+            辩论结果。
         """
-        raise NotImplementedError
+        _ = speaker  # 议长引用，后续用于事件发布
+
+        rounds: list[DebateRound] = []
+        current_proposal = await radical.propose(petition)
+        last_rebuttal = ""  # 首轮无 rebuttal
+        final_score = 0.0
+
+        for round_num in range(1, self._config.max_rounds + 1):
+            # 保守派 critique
+            critique_text = await conservative.critique(current_proposal)
+
+            # 计算分歧度
+            score = self.compute_conflict_score(current_proposal, critique_text)
+
+            debate_round = DebateRound(
+                round_number=round_num,
+                proposal=current_proposal,
+                critique=critique_text,
+                rebuttal=last_rebuttal,
+                conflict_score=score,
+            )
+
+            rounds.append(debate_round)
+            final_score = score
+
+            # 终止判定：共识达成（分歧度低于阈值）
+            if score < self._config.consensus_threshold and round_num >= self._config.min_rounds:
+                break
+
+            # TODO(Task 1-C): 当 score > self._config.conflict_threshold 时
+            # 触发议长控场逻辑（冷静期、切换辩论策略等）
+
+            # 如果还有轮次，激进派反驳
+            if round_num < self._config.max_rounds:
+                last_rebuttal = await radical.rebut(critique_text)
+                current_proposal = last_rebuttal
+
+        consensus = final_score < self._config.consensus_threshold
+        return DebateResult(
+            petition=petition,
+            rounds=rounds,
+            final_proposal=current_proposal,
+            consensus_reached=consensus,
+            final_conflict_score=final_score,
+        )
+
+
+# ---------------------------------------------------------------------------
+# VotingMachine
+# ---------------------------------------------------------------------------
+
+
+class VotingMachine:
+    """投票机制 — 简单多数制计票。"""
+
+    async def tally(self, proposal: str, voters: list[Voter]) -> VoteResult:
+        """收集投票并计票。
+
+        Args:
+            proposal: 待表决的提案文本。
+            voters: 参与投票的 Agent 列表（需实现 Voter 协议）。
+
+        Returns:
+            投票结果。
+        """
+        records: list[VoteRecord] = []
+        ayes = 0
+        nays = 0
+
+        for voter in voters:
+            vote_value = await voter.vote(proposal)
+            records.append(VoteRecord(voter_role=voter.role, vote=vote_value))
+            if vote_value:
+                ayes += 1
+            else:
+                nays += 1
+
+        passed = ayes > nays
+        return VoteResult(
+            proposal=proposal,
+            records=records,
+            ayes=ayes,
+            nays=nays,
+            passed=passed,
+        )
