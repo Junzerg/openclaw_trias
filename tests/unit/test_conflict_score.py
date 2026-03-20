@@ -184,6 +184,33 @@ class TestDimensions:
         assert result.dimensions["opposition"] > 0
         assert result.dimensions["intensity"] > 0  # "绝对" 命中
 
+    def test_chinese_negation_not_false_positive(
+        self,
+        engine: ConflictScoreEngine,
+    ) -> None:
+        """中文否定前缀不应触发反义匹配：'无法接受' 不应触发 '接受' 妥协信号。"""
+        result = engine.compute(
+            "提案",
+            "这个方案我们无法接受，不认同这种做法",
+        )
+        # "无法接受" 不应匹配妥协关键词 "接受"
+        # "不认同" 不应匹配妥协关键词 "认同"
+        # 因此 compromise 应为 80.0（无妥协信号）
+        assert result.dimensions["compromise"] == 80.0
+
+    def test_genuine_compromise_with_negated_nearby(
+        self,
+        engine: ConflictScoreEngine,
+    ) -> None:
+        """否定词旁边有独立妥协词时，独立妥协词仍应命中。"""
+        result = engine.compute(
+            "提案",
+            "无法接受全部，但部分同意其中观点，可以考虑折中",
+        )
+        # "无法接受" 不命中，但 "部分同意"、"可以考虑"、"折中" 应命中
+        # count=3, raw = max(0, 80-45) = 35.0
+        assert result.dimensions["compromise"] < 80.0
+
 
 # ---------------------------------------------------------------------------
 # compute_trend() 趋势测试

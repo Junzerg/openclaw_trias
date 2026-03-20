@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -106,11 +107,23 @@ _INTENSITY_KEYWORDS: list[str] = [
 # 关键词匹配工具
 # ---------------------------------------------------------------------------
 
+# 中文否定前缀 — "无法接受" 中的 "接受" 不应被视为妥协信号
+_CHINESE_NEGATION_PREFIXES: tuple[str, ...] = (
+    "不",
+    "无法",
+    "没有",
+    "未",
+    "非",
+    "难以",
+    "无",
+)
+
 
 def _count_keywords(text: str, keywords: list[str]) -> int:
     """统计文本中命中的关键词数量。
 
     中文关键词使用子串匹配（中文无空格分词），
+    但会检查否定前缀（如 "无法接受" 中的 "接受" 不算命中）。
     英文（纯 ASCII）关键词使用单词边界匹配，避免 "agree" 误匹配 "disagree"。
 
     Args:
@@ -120,8 +133,6 @@ def _count_keywords(text: str, keywords: list[str]) -> int:
     Returns:
         命中的关键词数量。
     """
-    import re
-
     lower_text = text.lower()
     count = 0
     for kw in keywords:
@@ -130,8 +141,18 @@ def _count_keywords(text: str, keywords: list[str]) -> int:
             if re.search(rf"\b{re.escape(kw)}\b", lower_text):
                 count += 1
         else:
-            # 中文：直接子串匹配
-            if kw in lower_text:
+            # 中文：子串匹配 + 否定前缀排除
+            idx = lower_text.find(kw)
+            if idx < 0:
+                continue
+            # 检查关键词前面是否有否定前缀
+            negated = False
+            for neg in _CHINESE_NEGATION_PREFIXES:
+                start = idx - len(neg)
+                if start >= 0 and lower_text[start:idx] == neg:
+                    negated = True
+                    break
+            if not negated:
                 count += 1
     return count
 

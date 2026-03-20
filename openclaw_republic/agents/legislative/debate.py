@@ -151,10 +151,10 @@ class DebateEngine:
             critique_text = await conservative.critique(current_proposal)
 
             # 使用 ConflictScoreEngine 计算分歧度
+            # 注意：当前轮次的 rebuttal 尚未生成，仅基于 proposal + critique 评分
             score_result = self._conflict_engine.compute(
                 proposal=current_proposal,
                 critique=critique_text,
-                rebuttal=last_rebuttal if last_rebuttal else None,
             )
             score = score_result.score
             score_history.append(score)
