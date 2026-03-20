@@ -3,7 +3,7 @@
 > **对应 Phase 0 子项**：0.3 SOUL.md 人设配置 + 0.4 宪法配置系统 + 0.5 日志 & 事件系统
 > **前置依赖**：Task 0-A（项目骨架搭建）
 > **预估工作量**：1-2 个会话（SOUL.md 创意写作需要斟酌）
-> **状态**：🔲 待开始
+> **状态**：✅ 已完成
 
 ---
 
@@ -354,14 +354,14 @@ tests/unit/
 
 ## 验收标准
 
-- [ ] 7 个 SOUL.md 文件就位，每个 1000-2000 字，人设鲜明
-- [ ] `constitution.yaml` 可被 Pydantic 加载校验，无 ValidationError
-- [ ] `load_constitution("config/constitution.yaml")` 返回 `ConstitutionConfig` 实例
-- [ ] `load_all_souls("config/souls/")` 返回 7 个角色的内容字典
-- [ ] `BaseEvent` 及所有子类可实例化并 JSON 序列化
-- [ ] `EventAction` 枚举覆盖全部 9 种 PRD §4 事件类型
-- [ ] structlog 日志可正常输出结构化日志
-- [ ] `pytest tests/unit/test_config_loader.py tests/unit/test_soul_loader.py tests/unit/test_events.py` 全绿
+- [x] 7 个 SOUL.md 文件就位，每个 1000-2000 字，人设鲜明 — ✅ 7 个角色均已编写
+- [x] `constitution.yaml` 可被 Pydantic 加载校验，无 ValidationError — ✅
+- [x] `load_constitution("config/constitution.yaml")` 返回 `ConstitutionConfig` 实例 — ✅
+- [x] `load_all_souls("config/souls/")` 返回 7 个角色的内容字典 — ✅
+- [x] `BaseEvent` 及所有子类可实例化并 JSON 序列化 — ✅
+- [x] `EventAction` 枚举覆盖全部 9 种 PRD §4 事件类型 — ✅
+- [x] structlog 日志可正常输出结构化日志 — ✅
+- [x] `pytest tests/unit/test_config_loader.py tests/unit/test_soul_loader.py tests/unit/test_events.py` 全绿 — ✅ 48 passed in 0.35s
 
 ---
 
@@ -384,3 +384,13 @@ tests/unit/
 ## 后续衔接
 
 完成后进入 → [Task 0-C · Dev 工具链 & 容器化](task0.3_devtools_and_ci.md)
+
+---
+
+## 完成记录
+
+- **完成时间**：2026-03-20
+- **验收结果**：8/8 全部通过
+- **测试概况**：48 passed in 0.35s（含 smoke tests）
+- **新增依赖**：pyyaml>=6.0（constitution.yaml 解析）
+- **额外产出**：`openclaw_republic/config/logging.py`（structlog 日志配置独立模块）
