@@ -58,6 +58,9 @@ def load_all_souls(directory: str | Path) -> dict[str, str]:
         FileNotFoundError: 目录不存在。
     """
     directory = Path(directory)
+    if not directory.is_dir():
+        msg = f"SOUL.md 目录不存在: {directory}"
+        raise FileNotFoundError(msg)
     souls: dict[str, str] = {}
     for md_file in sorted(directory.glob("*.md")):
         if md_file.name == "SOUL_TEMPLATE.md":

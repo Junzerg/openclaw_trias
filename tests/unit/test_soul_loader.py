@@ -86,3 +86,8 @@ class TestLoadAllSouls:
         char_count = len(content)
         assert char_count >= 500, f"{role}: 内容过短 ({char_count} chars)"
         assert char_count <= 10000, f"{role}: 内容过长 ({char_count} chars)"
+
+    def test_nonexistent_directory(self) -> None:
+        """不存在的目录抛出 FileNotFoundError。"""
+        with pytest.raises(FileNotFoundError):
+            load_all_souls("nonexistent/souls/dir")
