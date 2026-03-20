@@ -10,16 +10,19 @@ from openclaw_republic.schemas.events import (
     JudgmentEvent,
     VoteEvent,
 )
+from openclaw_republic.schemas.messages import AgentMessage, MessageType
 from openclaw_republic.schemas.verdict import Verdict
 
 __all__ = [
     "Act",
+    "AgentMessage",
     "BaseEvent",
     "DebateEvent",
     "EmotionType",
     "EventAction",
     "ExecutionEvent",
     "JudgmentEvent",
+    "MessageType",
     "Verdict",
     "VoteEvent",
 ]

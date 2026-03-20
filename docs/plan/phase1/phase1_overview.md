@@ -176,16 +176,19 @@ Petition → Drafting → Debating → Voted
 
 ---
 
-## 建议会话拆分
+## Task 拆分
+Phase 1 拆分为 6 个独立闭环的开发任务，按顺序执行：
 
-| 会话 | 聚焦领域 | 主要交付 |
-|------|---------|---------|
-| 1-1 | Agent 基类 & RBAC | `base.py`, 权限模型, SOUL.md 加载引擎 |
-| 1-2 | 立法分支核心 | 三个议员 Agent + 辩论协议 |
-| 1-3 | Conflict Score & 法案 Schema | 分歧度引擎 + JSON Schema |
-| 1-4 | 行政分支 | 总统 + 两位部长 + Veto + 执行引擎 |
-| 1-5 | 司法分支 | 大法官 + 违宪规则引擎 + Kill Switch |
-| 1-6 | 协作总线 & 集成 | 消息总线 + 状态机 + CLI 端到端 demo |
+| Task | 标题 | 涵盖子项 | 预估 | 状态 |
+|------|------|---------|------|------|
+| [Task 1-A](task1.1_agent_base_rbac.md) | Agent 基类 & RBAC 权限模型 | 1.1 全部 | 1 会话 | ✅ 已完成 |
+| [Task 1-B](task1.2_legislative_branch.md) | 立法分支核心 | 1.2.1~1.2.4 | 1-2 会话 | 🔲 待开始 |
+| [Task 1-C](task1.3_conflict_score_and_act_schema.md) | Conflict Score & 法案 Schema | 1.2.5~1.2.6 | 1 会话 | 🔲 待开始 |
+| [Task 1-D](task1.4_executive_branch.md) | 行政分支 | 1.3 全部 | 1-2 会话 | 🔲 待开始 |
+| [Task 1-E](task1.5_judicial_branch.md) | 司法分支 | 1.4 全部 | 1-2 会话 | 🔲 待开始 |
+| [Task 1-F](task1.6_bus_and_integration.md) | 协作总线 & 端到端集成 | 1.5 全部 + 端到端 | 1-2 会话 | 🔲 待开始 |
+
+**依赖关系**：`Task 1-A` → `Task 1-B` → `Task 1-C` → `Task 1-D` → `Task 1-E` → `Task 1-F`
 
 ---
 
