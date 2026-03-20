@@ -1,6 +1,6 @@
 """Pydantic 模型 — constitution.yaml 的类型安全表示。"""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class TokenBudgetConfig(BaseModel):
@@ -19,6 +19,13 @@ class DebateConfig(BaseModel):
     conflict_threshold: int = Field(ge=0, le=100, description="分歧度触发控场的阈值")
     consensus_threshold: int = Field(ge=0, le=100, description="共识阈值（低于此值视为达成共识）")
     min_rounds: int = Field(ge=1, description="最少辩论轮次")
+
+    @model_validator(mode="after")
+    def _check_rounds_consistency(self) -> "DebateConfig":
+        if self.min_rounds > self.max_rounds:
+            msg = f"min_rounds ({self.min_rounds}) 不能大于 max_rounds ({self.max_rounds})"
+            raise ValueError(msg)
+        return self
 
 
 class DeviationConfig(BaseModel):

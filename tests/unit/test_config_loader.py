@@ -133,3 +133,13 @@ class TestValidationConstraints:
                 consensus_threshold=30,
                 min_rounds=1,
             )
+
+    def test_min_rounds_exceeds_max_rounds(self) -> None:
+        """min_rounds > max_rounds 抛出 ValidationError。"""
+        with pytest.raises(ValidationError):
+            DebateConfig(
+                max_rounds=3,
+                conflict_threshold=80,
+                consensus_threshold=30,
+                min_rounds=5,
+            )
