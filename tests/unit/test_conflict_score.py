@@ -157,6 +157,33 @@ class TestDimensions:
         # rebuttal 添加了更多反对词，应导致更高对立度
         assert with_rebuttal.dimensions["opposition"] >= without.dimensions["opposition"]
 
+    def test_no_false_positive_on_english_substrings(
+        self,
+        engine: ConflictScoreEngine,
+    ) -> None:
+        """英文关键词不应子串误匹配：disagree 不应触发 agree。"""
+        # "disagree" 应只匹配 opposition 的 "disagree"，
+        # 不应额外匹配 compromise 的 "agree"
+        result = engine.compute(
+            "I propose we use innovation and new technology",
+            "I disagree with this unacceptable approach",
+        )
+        # opposition 应检测到 "disagree" 和 "unacceptable"
+        assert result.dimensions["opposition"] > 0
+        # compromise 不应误检到 "agree"（来自 "disagree"）
+        # 或 "accept"（来自 "unacceptable"）
+        # 无妥协关键词时 compromise 维度应为 80.0
+        assert result.dimensions["compromise"] == 80.0
+
+    def test_chinese_keywords_still_match(
+        self,
+        engine: ConflictScoreEngine,
+    ) -> None:
+        """中文关键词仍使用子串匹配。"""
+        result = engine.compute("提案内容", "绝对反对这个方案")
+        assert result.dimensions["opposition"] > 0
+        assert result.dimensions["intensity"] > 0  # "绝对" 命中
+
 
 # ---------------------------------------------------------------------------
 # compute_trend() 趋势测试

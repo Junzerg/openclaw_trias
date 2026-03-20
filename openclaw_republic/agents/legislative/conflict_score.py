@@ -62,13 +62,10 @@ _OPPOSITION_KEYWORDS: list[str] = [
     "dangerous",
     "wrong",
     "unacceptable",
-    "no",
 ]
 
 # 妥协 / 让步词
 _COMPROMISE_KEYWORDS: list[str] = [
-    "但是",
-    "不过",
     "可以考虑",
     "部分同意",
     "有道理",
@@ -77,8 +74,6 @@ _COMPROMISE_KEYWORDS: list[str] = [
     "认同",
     "妥协",
     "退让",
-    "however",
-    "although",
     "agree",
     "accept",
     "compromise",
@@ -105,6 +100,40 @@ _INTENSITY_KEYWORDS: list[str] = [
     "must",
     "totally",
 ]
+
+
+# ---------------------------------------------------------------------------
+# 关键词匹配工具
+# ---------------------------------------------------------------------------
+
+
+def _count_keywords(text: str, keywords: list[str]) -> int:
+    """统计文本中命中的关键词数量。
+
+    中文关键词使用子串匹配（中文无空格分词），
+    英文（纯 ASCII）关键词使用单词边界匹配，避免 "agree" 误匹配 "disagree"。
+
+    Args:
+        text: 待扫描文本。
+        keywords: 关键词列表。
+
+    Returns:
+        命中的关键词数量。
+    """
+    import re
+
+    lower_text = text.lower()
+    count = 0
+    for kw in keywords:
+        if kw.isascii():
+            # 英文：使用单词边界 \b 匹配
+            if re.search(rf"\b{re.escape(kw)}\b", lower_text):
+                count += 1
+        else:
+            # 中文：直接子串匹配
+            if kw in lower_text:
+                count += 1
+    return count
 
 
 # ---------------------------------------------------------------------------
@@ -230,10 +259,11 @@ class ConflictScoreEngine:
         """立场对立度 — 否定/反对关键词密度。
 
         扫描文本中的反对关键词出现次数，映射到 0~100 分。
+        中文关键词使用子串匹配，英文关键词使用分词匹配避免误判。
         """
         if not text:
             return 0.0
-        count = sum(1 for kw in _OPPOSITION_KEYWORDS if kw in text.lower())
+        count = _count_keywords(text, _OPPOSITION_KEYWORDS)
         # 每个关键词贡献约 12 分，上限 100
         return min(100.0, count * 12.0)
 
@@ -267,7 +297,7 @@ class ConflictScoreEngine:
         if not text:
             return 50.0  # 无文本，中等分歧
 
-        count = sum(1 for kw in _COMPROMISE_KEYWORDS if kw in text.lower())
+        count = _count_keywords(text, _COMPROMISE_KEYWORDS)
         # 妥协关键词越多，分歧越低（反向映射）
         raw = max(0.0, 80.0 - count * 15.0)
         return min(100.0, raw)
@@ -281,7 +311,7 @@ class ConflictScoreEngine:
         # 感叹号计数
         exclamation_count = text.count("!") + text.count("！")
         # 强烈词汇计数
-        keyword_count = sum(1 for kw in _INTENSITY_KEYWORDS if kw in text.lower())
+        keyword_count = _count_keywords(text, _INTENSITY_KEYWORDS)
 
         intensity_raw = exclamation_count * 10.0 + keyword_count * 8.0
         return min(100.0, intensity_raw)
