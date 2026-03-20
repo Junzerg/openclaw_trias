@@ -3,8 +3,7 @@
 包含：辩论引擎 (DebateEngine)、投票机制 (VotingMachine)、
 以及辩论结果数据模型 (DebateRound, DebateResult, VoteRecord, VoteResult)。
 
-Conflict Score 的精确计算逻辑在 Task 1-C 中实现，
-此处使用简单文本差异占位。
+Conflict Score 由 ConflictScoreEngine 计算，基于规则引擎实现。
 """
 
 from __future__ import annotations
@@ -12,6 +11,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
+
+from openclaw_republic.agents.legislative.conflict_score import (
+    ConflictScoreEngine,
+    ConflictTrend,
+)
 
 if TYPE_CHECKING:
     from openclaw_republic.agents.legislative.conservative_mp import ConservativeMP
@@ -51,6 +55,10 @@ class DebateRound(BaseModel):
     critique: str = Field(description="保守派批评/二次论证内容")
     rebuttal: str = Field(default="", description="激进派反驳内容（首轮为空）")
     conflict_score: float = Field(ge=0.0, le=100.0, description="本轮分歧度")
+    speaker_intervention: str | None = Field(
+        default=None,
+        description="议长控场声明（仅在分歧度超过控场阈值时出现）",
+    )
 
 
 class DebateResult(BaseModel):
@@ -61,6 +69,10 @@ class DebateResult(BaseModel):
     final_proposal: str = Field(description="最终提案文本")
     consensus_reached: bool = Field(description="是否达成共识")
     final_conflict_score: float = Field(ge=0.0, le=100.0, description="最终分歧度")
+    conflict_trend: ConflictTrend | None = Field(
+        default=None,
+        description="分歧度趋势（至少 2 轮辩论后可用）",
+    )
 
 
 class VoteRecord(BaseModel):
@@ -89,7 +101,7 @@ class DebateEngine:
     """议会辩论引擎 — 管理辩论流程。
 
     负责：辩论轮次管理、发言调度、conflict_score 计算、
-    终止条件判定。
+    终止条件判定、议长控场触发。
     """
 
     def __init__(self, config: DebateConfig) -> None:
@@ -99,27 +111,7 @@ class DebateEngine:
             config: 辩论规则配置（来自 constitution.yaml）。
         """
         self._config = config
-
-    def compute_conflict_score(self, proposal: str, critique: str) -> float:
-        """计算当前辩论的分歧度（占位实现）。
-
-        简单实现：基于提案和批评文本长度差异产生分歧度。
-        真正的 NLP 计算逻辑将在 Task 1-C 中实现。
-
-        Args:
-            proposal: 提案文本。
-            critique: 批评文本。
-
-        Returns:
-            分歧度评分 (0.0 ~ 100.0)。
-        """
-        if not proposal and not critique:
-            return 0.0
-        # 占位：用文本长度差异比率作为粗略分歧度
-        total = len(proposal) + len(critique)
-        diff = abs(len(proposal) - len(critique))
-        score = min(100.0, (diff / total) * 100.0 + 30.0)
-        return round(score, 2)
+        self._conflict_engine = ConflictScoreEngine()
 
     async def run_debate(
         self,
@@ -134,12 +126,13 @@ class DebateEngine:
         1. 激进派针对请愿提出提案
         2. 保守派对提案进行 critique
         3. 计算 conflict_score
-        4. 如未达共识且未达最大轮次：
+        4. 如分歧度超过控场阈值，议长介入发出冷静声明
+        5. 如未达共识且未达最大轮次：
            激进派 rebut → 保守派再 critique → 重新计算
-        5. 共识或轮次耗尽时终止
+        6. 共识或轮次耗尽时终止，计算趋势
 
         Args:
-            speaker: 议长（用于事件发布，当前未使用）。
+            speaker: 议长（用于控场介入）。
             radical: 激进派议员。
             conservative: 保守派议员。
             petition: 选民请愿内容。
@@ -147,9 +140,8 @@ class DebateEngine:
         Returns:
             辩论结果。
         """
-        _ = speaker  # 议长引用，后续用于事件发布
-
         rounds: list[DebateRound] = []
+        score_history: list[float] = []
         current_proposal = await radical.propose(petition)
         last_rebuttal = ""  # 首轮无 rebuttal
         final_score = 0.0
@@ -158,8 +150,23 @@ class DebateEngine:
             # 保守派 critique
             critique_text = await conservative.critique(current_proposal)
 
-            # 计算分歧度
-            score = self.compute_conflict_score(current_proposal, critique_text)
+            # 使用 ConflictScoreEngine 计算分歧度
+            score_result = self._conflict_engine.compute(
+                proposal=current_proposal,
+                critique=critique_text,
+                rebuttal=last_rebuttal if last_rebuttal else None,
+            )
+            score = score_result.score
+            score_history.append(score)
+
+            # 议长控场：分歧度超过控场阈值时介入
+            intervention: str | None = None
+            if score > self._config.conflict_threshold:
+                intervention = await speaker.intervene(
+                    current_proposal,
+                    critique_text,
+                    score,
+                )
 
             debate_round = DebateRound(
                 round_number=round_num,
@@ -167,6 +174,7 @@ class DebateEngine:
                 critique=critique_text,
                 rebuttal=last_rebuttal,
                 conflict_score=score,
+                speaker_intervention=intervention,
             )
 
             rounds.append(debate_round)
@@ -176,13 +184,15 @@ class DebateEngine:
             if score < self._config.consensus_threshold and round_num >= self._config.min_rounds:
                 break
 
-            # TODO(Task 1-C): 当 score > self._config.conflict_threshold 时
-            # 触发议长控场逻辑（冷静期、切换辩论策略等）
-
             # 如果还有轮次，激进派反驳
             if round_num < self._config.max_rounds:
                 last_rebuttal = await radical.rebut(critique_text)
                 current_proposal = last_rebuttal
+
+        # 计算趋势（至少 2 轮）
+        trend: ConflictTrend | None = None
+        if len(score_history) >= 2:  # noqa: PLR2004
+            trend = self._conflict_engine.compute_trend(score_history)
 
         consensus = final_score < self._config.consensus_threshold
         return DebateResult(
@@ -191,6 +201,7 @@ class DebateEngine:
             final_proposal=current_proposal,
             consensus_reached=consensus,
             final_conflict_score=final_score,
+            conflict_trend=trend,
         )
 
 

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from openclaw_republic.agents.legislative.conflict_score import ConflictScoreEngine
 from openclaw_republic.agents.legislative.conservative_mp import ConservativeMP
 from openclaw_republic.agents.legislative.debate import (
     DebateEngine,
@@ -36,48 +37,27 @@ def _make_config(
     )
 
 
+def _make_agents(
+    *,
+    radical_response: str = "激进方案",
+    conservative_response: str = "保守批评",
+    speaker_response: str = "",
+) -> tuple[Speaker, RadicalMP, ConservativeMP]:
+    """创建 mock 过的 Agent 三件套。"""
+    speaker = Speaker()
+    radical = RadicalMP()
+    conservative = ConservativeMP()
+
+    speaker._call_llm = AsyncMock(return_value=speaker_response)  # type: ignore[method-assign]
+    radical._call_llm = AsyncMock(return_value=radical_response)  # type: ignore[method-assign]
+    conservative._call_llm = AsyncMock(return_value=conservative_response)  # type: ignore[method-assign]
+
+    return speaker, radical, conservative
+
+
 # ---------------------------------------------------------------------------
-# DebateEngine 测试
+# DebateEngine 辩论流程测试
 # ---------------------------------------------------------------------------
-
-
-class TestConflictScore:
-    """compute_conflict_score() 测试。"""
-
-    def test_within_range(self) -> None:
-        """分歧度在 0~100 范围内。"""
-        engine = DebateEngine(_make_config())
-        score = engine.compute_conflict_score("提案内容 A", "批评内容 B")
-        assert 0.0 <= score <= 100.0
-
-    def test_empty_inputs(self) -> None:
-        """两个空字符串返回 0。"""
-        engine = DebateEngine(_make_config())
-        score = engine.compute_conflict_score("", "")
-        assert score == 0.0
-
-    def test_identical_length(self) -> None:
-        """相同长度文本应产生较低分歧（基线 30）。"""
-        engine = DebateEngine(_make_config())
-        score = engine.compute_conflict_score("abc", "xyz")
-        # 长度相同，diff=0，score = 0/6 * 100 + 30 = 30
-        assert score == 30.0
-
-    def test_different_length(self) -> None:
-        """不同长度文本分歧度更高。"""
-        engine = DebateEngine(_make_config())
-        score_same = engine.compute_conflict_score("abc", "xyz")
-        score_diff = engine.compute_conflict_score("a", "very long critique text")
-        assert score_diff > score_same
-
-    def test_one_empty_caps_at_100(self) -> None:
-        """一方为空时分歧度上限为 100。"""
-        engine = DebateEngine(_make_config())
-        score = engine.compute_conflict_score("", "non-empty text")
-        assert score == 100.0
-        # 对称性
-        score2 = engine.compute_conflict_score("non-empty text", "")
-        assert score2 == 100.0
 
 
 class TestRunDebate:
@@ -86,12 +66,7 @@ class TestRunDebate:
     @pytest.mark.asyncio
     async def test_full_debate_returns_result(self) -> None:
         """完整辩论流程返回 DebateResult。"""
-        speaker = Speaker()
-        radical = RadicalMP()
-        conservative = ConservativeMP()
-
-        radical._call_llm = AsyncMock(return_value="激进方案")  # type: ignore[method-assign]
-        conservative._call_llm = AsyncMock(return_value="保守批评")  # type: ignore[method-assign]
+        speaker, radical, conservative = _make_agents()
 
         config = _make_config(max_rounds=3, min_rounds=1, consensus_threshold=50)
         engine = DebateEngine(config)
@@ -104,13 +79,11 @@ class TestRunDebate:
     @pytest.mark.asyncio
     async def test_consensus_terminates_early(self) -> None:
         """共识达成时提前终止辩论。"""
-        speaker = Speaker()
-        radical = RadicalMP()
-        conservative = ConservativeMP()
-
-        # 两者返回相同长度文本 → conflict_score ≈ 30（低于 consensus_threshold=50）
-        radical._call_llm = AsyncMock(return_value="同意同意同意")  # type: ignore[method-assign]
-        conservative._call_llm = AsyncMock(return_value="也同意同意同")  # type: ignore[method-assign]
+        # 使用妥协语言降低分歧度
+        speaker, radical, conservative = _make_agents(
+            radical_response="部分同意，可以考虑折中方案，接受",
+            conservative_response="有道理，部分同意，可以考虑接受这个方案",
+        )
 
         config = _make_config(
             max_rounds=10,
@@ -120,21 +93,17 @@ class TestRunDebate:
         engine = DebateEngine(config)
 
         result = await engine.run_debate(speaker, radical, conservative, "请愿")
-        # 因为 conflict_score ≈ 30 < 50，第一轮就应达成共识
+        # 妥协信号多，分歧度低，第一轮就应达成共识
         assert result.consensus_reached is True
         assert len(result.rounds) == 1
 
     @pytest.mark.asyncio
     async def test_max_rounds_exhaustion(self) -> None:
         """最大轮次耗尽时终止辩论。"""
-        speaker = Speaker()
-        radical = RadicalMP()
-        conservative = ConservativeMP()
-
-        # 制造持续高分歧 — 差异很大的文本
-        radical._call_llm = AsyncMock(return_value="a")  # type: ignore[method-assign]
-        conservative._call_llm = AsyncMock(  # type: ignore[method-assign]
-            return_value="这是一段非常非常长的批评文本，用来制造高分歧度",
+        # 使用对抗性语言保持高分歧
+        speaker, radical, conservative = _make_agents(
+            radical_response="绝对反对！不可能！",
+            conservative_response="反对！不同意！荒谬！错误！危险！必须拒绝！",
         )
 
         config = _make_config(
@@ -150,12 +119,10 @@ class TestRunDebate:
     @pytest.mark.asyncio
     async def test_min_rounds_respected(self) -> None:
         """即使共识达成，也至少完成 min_rounds 轮。"""
-        speaker = Speaker()
-        radical = RadicalMP()
-        conservative = ConservativeMP()
-
-        radical._call_llm = AsyncMock(return_value="同意")  # type: ignore[method-assign]
-        conservative._call_llm = AsyncMock(return_value="同意")  # type: ignore[method-assign]
+        speaker, radical, conservative = _make_agents(
+            radical_response="部分同意，可以考虑，有道理，接受折中",
+            conservative_response="部分同意，可以考虑，有道理，接受折中",
+        )
 
         config = _make_config(
             max_rounds=10,
@@ -170,12 +137,10 @@ class TestRunDebate:
     @pytest.mark.asyncio
     async def test_rounds_have_correct_numbers(self) -> None:
         """每轮辩论的编号递增。"""
-        speaker = Speaker()
-        radical = RadicalMP()
-        conservative = ConservativeMP()
-
-        radical._call_llm = AsyncMock(return_value="x" * 10)  # type: ignore[method-assign]
-        conservative._call_llm = AsyncMock(return_value="y" * 100)  # type: ignore[method-assign]
+        speaker, radical, conservative = _make_agents(
+            radical_response="绝对反对！不可能！",
+            conservative_response="反对！不同意！荒谬！错误！",
+        )
 
         config = _make_config(max_rounds=3, min_rounds=1, consensus_threshold=5)
         engine = DebateEngine(config)
@@ -187,12 +152,7 @@ class TestRunDebate:
     @pytest.mark.asyncio
     async def test_first_round_no_rebuttal(self) -> None:
         """首轮辩论无 rebuttal。"""
-        speaker = Speaker()
-        radical = RadicalMP()
-        conservative = ConservativeMP()
-
-        radical._call_llm = AsyncMock(return_value="提案")  # type: ignore[method-assign]
-        conservative._call_llm = AsyncMock(return_value="批评")  # type: ignore[method-assign]
+        speaker, radical, conservative = _make_agents()
 
         config = _make_config(max_rounds=1, min_rounds=1, consensus_threshold=5)
         engine = DebateEngine(config)
@@ -216,9 +176,10 @@ class TestRunDebate:
                 return "初始提案"  # propose
             return f"反驳第{call_count - 1}轮"  # rebut
 
+        speaker._call_llm = AsyncMock(return_value="请冷静")  # type: ignore[method-assign]
         radical._call_llm = radical_llm  # type: ignore[method-assign]
         conservative._call_llm = AsyncMock(  # type: ignore[method-assign]
-            return_value="这是一段非常非常长的批评文本用来保持高分歧度持续辩论下去",
+            return_value="反对！不同意！荒谬！错误！危险！绝对不行！必须拒绝！",
         )
 
         config = _make_config(max_rounds=3, min_rounds=1, consensus_threshold=5)
@@ -232,6 +193,127 @@ class TestRunDebate:
         assert result.rounds[1].rebuttal == "反驳第1轮"
         # 第二轮的 proposal 应为反驳文本（因为它成了新提案）
         assert result.rounds[1].proposal == "反驳第1轮"
+
+
+# ---------------------------------------------------------------------------
+# ConflictScoreEngine 集成测试
+# ---------------------------------------------------------------------------
+
+
+class TestConflictScoreIntegration:
+    """DebateEngine 中 ConflictScoreEngine 集成测试。"""
+
+    def test_engine_has_conflict_engine(self) -> None:
+        """DebateEngine 包含 ConflictScoreEngine 实例。"""
+        engine = DebateEngine(_make_config())
+        assert isinstance(engine._conflict_engine, ConflictScoreEngine)
+
+    @pytest.mark.asyncio
+    async def test_conflict_scores_recorded(self) -> None:
+        """每轮辩论记录分歧度。"""
+        speaker, radical, conservative = _make_agents()
+
+        config = _make_config(max_rounds=2, min_rounds=2, consensus_threshold=5)
+        engine = DebateEngine(config)
+
+        result = await engine.run_debate(speaker, radical, conservative, "请愿")
+        for r in result.rounds:
+            assert 0.0 <= r.conflict_score <= 100.0
+
+    @pytest.mark.asyncio
+    async def test_conflict_trend_computed(self) -> None:
+        """多轮辩论后计算分歧度趋势。"""
+        speaker, radical, conservative = _make_agents(
+            radical_response="绝对反对！",
+            conservative_response="反对！不同意！错误！",
+        )
+
+        config = _make_config(max_rounds=3, min_rounds=2, consensus_threshold=5)
+        engine = DebateEngine(config)
+
+        result = await engine.run_debate(speaker, radical, conservative, "请愿")
+        if len(result.rounds) >= 2:
+            assert result.conflict_trend is not None
+            assert result.conflict_trend.direction in (
+                "converging",
+                "diverging",
+                "stable",
+            )
+
+    @pytest.mark.asyncio
+    async def test_single_round_no_trend(self) -> None:
+        """单轮辩论无趋势。"""
+        speaker, radical, conservative = _make_agents(
+            radical_response="部分同意 可以考虑 有道理 接受 折中 妥协",
+            conservative_response="部分同意 可以考虑 有道理 接受 折中 妥协",
+        )
+
+        config = _make_config(max_rounds=5, min_rounds=1, consensus_threshold=50)
+        engine = DebateEngine(config)
+
+        result = await engine.run_debate(speaker, radical, conservative, "请愿")
+        if len(result.rounds) == 1:
+            assert result.conflict_trend is None
+
+
+# ---------------------------------------------------------------------------
+# 议长控场测试
+# ---------------------------------------------------------------------------
+
+
+class TestSpeakerIntervention:
+    """议长控场触发测试。"""
+
+    @pytest.mark.asyncio
+    async def test_intervention_when_high_conflict(self) -> None:
+        """分歧度超过控场阈值时议长介入。"""
+        speaker, radical, conservative = _make_agents(
+            radical_response="绝对反对！",
+            conservative_response="反对！不同意！荒谬！错误！危险！必须拒绝！绝对不行！极其严重！",
+            speaker_response="请双方保持冷静，理性讨论",
+        )
+
+        config = _make_config(
+            max_rounds=2,
+            min_rounds=1,
+            conflict_threshold=30,  # 低阈值，容易触发控场
+            consensus_threshold=5,
+        )
+        engine = DebateEngine(config)
+
+        result = await engine.run_debate(speaker, radical, conservative, "请愿")
+        # 至少有一轮应有控场声明
+        interventions = [
+            r.speaker_intervention for r in result.rounds if r.speaker_intervention is not None
+        ]
+        assert len(interventions) > 0
+
+    @pytest.mark.asyncio
+    async def test_no_intervention_when_low_conflict(self) -> None:
+        """分歧度低于控场阈值时无控场。"""
+        speaker, radical, conservative = _make_agents(
+            radical_response="部分同意 可以考虑 有道理 接受 折中",
+            conservative_response="部分同意 可以考虑 有道理 接受 折中",
+        )
+
+        config = _make_config(
+            max_rounds=2,
+            min_rounds=2,
+            conflict_threshold=95,  # 高阈值，不容易触发
+            consensus_threshold=5,
+        )
+        engine = DebateEngine(config)
+
+        result = await engine.run_debate(speaker, radical, conservative, "请愿")
+        interventions = [
+            r.speaker_intervention for r in result.rounds if r.speaker_intervention is not None
+        ]
+        assert len(interventions) == 0
+
+
+# ---------------------------------------------------------------------------
+# DebateRound / DebateResult 模型测试
+# ---------------------------------------------------------------------------
 
 
 class TestDebateRound:
@@ -248,6 +330,18 @@ class TestDebateRound:
         )
         assert r.round_number == 1
         assert r.conflict_score == 45.0
+        assert r.speaker_intervention is None
+
+    def test_with_intervention(self) -> None:
+        """DebateRound 可包含控场声明。"""
+        r = DebateRound(
+            round_number=1,
+            proposal="提案",
+            critique="批评",
+            conflict_score=85.0,
+            speaker_intervention="请保持冷静",
+        )
+        assert r.speaker_intervention == "请保持冷静"
 
     def test_score_validation(self) -> None:
         """conflict_score 超出 0~100 范围应报错。"""
@@ -274,6 +368,7 @@ class TestDebateResult:
         )
         assert result.consensus_reached is True
         assert result.final_conflict_score == 20.0
+        assert result.conflict_trend is None
 
 
 # ---------------------------------------------------------------------------

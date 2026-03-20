@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -20,13 +21,14 @@ if TYPE_CHECKING:
     )
     from openclaw_republic.agents.legislative.radical_mp import RadicalMP
     from openclaw_republic.config.models import DebateConfig
+    from openclaw_republic.schemas.act import Act
 
 
 class Speaker(BaseAgent):
     """议长 — 议会辩论流程的总控。
 
     议长负责：接收选民请愿、分配辩论预算、控制辩论轮次、
-    判定终止条件、发起表决、汇总产出结果。
+    判定终止条件、发起表决、控场介入、汇总产出结果。
     """
 
     def __init__(self, *, soul_path: Path | None = None) -> None:
@@ -126,3 +128,123 @@ class Speaker(BaseAgent):
         self.require_permission(Permission.PLAN)
         machine = VotingMachine()
         return await machine.tally(proposal, voters)
+
+    async def intervene(
+        self,
+        proposal: str,
+        critique: str,
+        conflict_score: float,
+    ) -> str:
+        """议长控场介入 — 在分歧度过高时发出冷静声明。
+
+        Args:
+            proposal: 当前提案文本。
+            critique: 当前批评文本。
+            conflict_score: 当前分歧度评分。
+
+        Returns:
+            控场声明文本。
+        """
+        self.require_permission(Permission.PLAN)
+        prompt = (
+            f"作为议长，当前辩论分歧度达到 {conflict_score:.1f}，"
+            f"已超过控场阈值。请发出冷静声明，引导双方理性讨论。\n\n"
+            f"提案摘要：{proposal[:200]}\n"
+            f"批评摘要：{critique[:200]}"
+        )
+        return await self._call_llm(prompt)
+
+    async def generate_act(
+        self,
+        petition: str,
+        debate_result: DebateResult,
+        vote_result: VoteResult,
+    ) -> Act:
+        """生成《执行法案》— 辩论结束 + 表决通过后生成结构化法案。
+
+        将辩论共识转化为结构化的 Act，包含执行步骤、辩论记录
+        和表决记录。
+
+        当前阶段使用占位实现：从 final_proposal 生成单步 Act。
+        后续将由 LLM 将自然语言共识提炼为 ActStep 列表。
+
+        Args:
+            petition: 原始选民请愿内容。
+            debate_result: 辩论结果。
+            vote_result: 表决结果。
+
+        Returns:
+            完整的执行法案。
+
+        Raises:
+            ValueError: 表决未通过，无法生成法案。
+        """
+        from openclaw_republic.schemas.act import (
+            Act,
+            ActStep,
+            ActVoteRecord,
+            DebateRecord,
+        )
+
+        self.require_permission(Permission.PLAN)
+
+        if not vote_result.passed:
+            msg = "表决未通过，无法生成执行法案"
+            raise ValueError(msg)
+
+        # 从辩论结果提取共识点（占位：使用 LLM 提炼）
+        prompt = f"将以下辩论共识提炼为执行步骤：\n\n{debate_result.final_proposal}"
+        _ = await self._call_llm(prompt)
+
+        # 占位实现：从 final_proposal 生成单步 Act
+        step = ActStep(
+            index=0,
+            description=debate_result.final_proposal,
+            required_skill="CodeExecution",
+            tool_parameters={},
+            estimated_tokens=10000,
+            acceptance_criteria="按照提案内容完成执行",
+        )
+
+        # 构建辩论记录
+        debate_record = DebateRecord(
+            total_rounds=len(debate_result.rounds),
+            final_conflict_score=debate_result.final_conflict_score,
+            consensus_points=[debate_result.final_proposal],
+            remaining_concerns=[],
+        )
+
+        # 构建表决记录
+        voter_positions: dict[str, str] = {}
+        for record in vote_result.records:
+            voter_positions[record.voter_role] = "aye" if record.vote else "nay"
+
+        act_vote_record = ActVoteRecord(
+            ayes=vote_result.ayes,
+            nays=vote_result.nays,
+            result="passed" if vote_result.passed else "rejected",
+            voter_positions=voter_positions,
+        )
+
+        return Act(
+            act_id=str(uuid.uuid4()),
+            title=f"法案：{petition[:50]}",
+            summary=debate_result.final_proposal[:200],
+            petition_origin=petition,
+            steps=[step],
+            total_estimated_tokens=step.estimated_tokens,
+            debate_record=debate_record,
+            vote_record=act_vote_record,
+        )
+
+    async def _call_llm(self, prompt: str) -> str:
+        """调用 LLM 生成回复（占位实现，后续替换为真实 LLM 调用）。
+
+        Args:
+            prompt: 发送给 LLM 的完整提示词。
+
+        Returns:
+            LLM 的回复文本。
+        """
+        _ = prompt
+        return ""

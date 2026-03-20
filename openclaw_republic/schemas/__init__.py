@@ -1,6 +1,6 @@
 """数据模型 (Schemas) — 法案、事件、判决等核心数据结构。"""
 
-from openclaw_republic.schemas.act import Act
+from openclaw_republic.schemas.act import Act, ActStep, ActVoteRecord, DebateRecord
 from openclaw_republic.schemas.events import (
     BaseEvent,
     DebateEvent,
@@ -15,9 +15,12 @@ from openclaw_republic.schemas.verdict import Verdict
 
 __all__ = [
     "Act",
+    "ActStep",
+    "ActVoteRecord",
     "AgentMessage",
     "BaseEvent",
     "DebateEvent",
+    "DebateRecord",
     "EmotionType",
     "EventAction",
     "ExecutionEvent",
