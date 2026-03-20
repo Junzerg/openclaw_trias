@@ -211,6 +211,20 @@ class TestDimensions:
         # count=3, raw = max(0, 80-45) = 35.0
         assert result.dimensions["compromise"] < 80.0
 
+    def test_negated_first_genuine_second_occurrence(
+        self,
+        engine: ConflictScoreEngine,
+    ) -> None:
+        """同一关键词出现两次：第一次被否定、第二次为真，应命中。"""
+        result = engine.compute(
+            "提案",
+            "我们无法接受方案A，但可以接受方案B",
+        )
+        # 第一个 "接受" 被 "无法" 否定 → 跳过
+        # 第二个 "接受" 无否定前缀 → 命中
+        # count=1, raw = max(0, 80-15) = 65.0
+        assert result.dimensions["compromise"] == 65.0
+
 
 # ---------------------------------------------------------------------------
 # compute_trend() 趋势测试

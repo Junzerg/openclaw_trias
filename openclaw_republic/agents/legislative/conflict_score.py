@@ -141,18 +141,25 @@ def _count_keywords(text: str, keywords: list[str]) -> int:
             if re.search(rf"\b{re.escape(kw)}\b", lower_text):
                 count += 1
         else:
-            # 中文：子串匹配 + 否定前缀排除
-            idx = lower_text.find(kw)
-            if idx < 0:
-                continue
-            # 检查关键词前面是否有否定前缀
-            negated = False
-            for neg in _CHINESE_NEGATION_PREFIXES:
-                start = idx - len(neg)
-                if start >= 0 and lower_text[start:idx] == neg:
-                    negated = True
+            # 中文：扫描所有出现位置 + 否定前缀排除
+            # 如果任何一处未被否定前缀修饰，则视为命中
+            search_start = 0
+            matched = False
+            while not matched:
+                idx = lower_text.find(kw, search_start)
+                if idx < 0:
                     break
-            if not negated:
+                # 检查关键词前面是否有否定前缀
+                negated = False
+                for neg in _CHINESE_NEGATION_PREFIXES:
+                    start = idx - len(neg)
+                    if start >= 0 and lower_text[start:idx] == neg:
+                        negated = True
+                        break
+                if not negated:
+                    matched = True
+                search_start = idx + len(kw)
+            if matched:
                 count += 1
     return count
 
