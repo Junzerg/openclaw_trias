@@ -1,6 +1,3 @@
-# Virtual environment
-.venv/
-
 # Python
 __pycache__/
 *.py[cod]
@@ -10,24 +7,34 @@ dist/
 build/
 *.egg
 
+# Virtual Environment
+.venv/
+venv/
+
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
 *~
 
+# Type Checking
+.mypy_cache/
+
+# Linting
+.ruff_cache/
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Docker
+docker-compose.override.yml
+
 # OS
 .DS_Store
 Thumbs.db
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Type checking
-.mypy_cache/
-
-# Ruff
-.ruff_cache/
+# Environment
+.env
+.env.local

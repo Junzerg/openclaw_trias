@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 
 class Act:
     """执行法案 — 描述目标、步骤列表、所需 Skill、验收标准。"""
 
-    def __init__(self, title: str, steps: list[dict] | None = None) -> None:
+    def __init__(self, title: str, steps: list[dict[str, Any]] | None = None) -> None:
         """初始化法案。
 
         Args:

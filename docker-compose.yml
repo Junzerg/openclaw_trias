@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openclaw-republic
+    volumes:
+      - .:/app                    # 开发模式挂载源码
+      - /app/.venv                # 避免覆盖容器内 venv
+    ports:
+      - "8080:8080"               # Phase 2 API 端口预留
+    environment:
+      - PYTHONPATH=/app
+      - LOG_LEVEL=DEBUG
+    command: ["pytest", "-v"]     # 开发阶段默认跑测试
+
+  # Phase 2+ 扩展预留
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"

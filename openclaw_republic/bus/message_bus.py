@@ -12,7 +12,7 @@ class MessageBus:
     """消息总线 — 管理三权分支之间的消息路由。"""
 
     def __init__(self) -> None:
-        self._subscribers: dict[str, list] = {}
+        self._subscribers: dict[str, list[Any]] = {}
 
     def subscribe(self, topic: str, handler: Any) -> None:
         """订阅指定主题的消息。

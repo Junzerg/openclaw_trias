@@ -10,14 +10,14 @@ from pydantic import BaseModel, Field
 class EventAction(str, Enum):
     """事件动作类型 — 直接映射 PRD §4 的 WebSocket 事件。"""
 
-    PROPOSE = "propose"                    # 提案
-    BRAWL = "brawl"                        # 辩论/争吵
-    ORDER = "order"                        # 议长控场
-    VOTE_PASSED = "vote_passed"            # 表决通过
-    SIGN_ACT = "sign_act"                  # 总统签署
-    VETO = "veto"                          # 总统否决
-    TOOL_CALL = "tool_call"                # 工具调用
-    CONSTITUTIONAL = "constitutional"      # 合宪判决
+    PROPOSE = "propose"  # 提案
+    BRAWL = "brawl"  # 辩论/争吵
+    ORDER = "order"  # 议长控场
+    VOTE_PASSED = "vote_passed"  # 表决通过
+    SIGN_ACT = "sign_act"  # 总统签署
+    VETO = "veto"  # 总统否决
+    TOOL_CALL = "tool_call"  # 工具调用
+    CONSTITUTIONAL = "constitutional"  # 合宪判决
     UNCONSTITUTIONAL = "unconstitutional"  # 违宪判决
 
 

@@ -3,13 +3,14 @@
 > **对应 Phase 0 子项**：0.6 Dev 工具链
 > **前置依赖**：Task 0-A（项目骨架搭建）— 需要 pyproject.toml 和包结构就位
 > **预估工作量**：1 个会话
-> **状态**：🔲 待开始
+> **状态**：✅ 已完成
+> **备注**：单人开发，不设 CI/CD，聚焦本地工具链 + 容器化部署
 
 ---
 
 ## 目标
 
-配置开发工具链（代码质量自动化）和容器化环境（一键启动），确保多人协作和 CI/CD 的基础设施就绪。
+配置本地开发工具链（代码质量自动化）和容器化环境（一键部署/展示），确保代码质量和可移植部署。
 
 ---
 
@@ -46,55 +47,9 @@ repos:
       - id: check-merge-conflict
 ```
 
-执行：`pre-commit install` 激活 hooks。
+执行：`.venv\Scripts\pre-commit.exe install` 激活 hooks。
 
-### Step 2：配置 GitHub Actions CI
-
-创建 `.github/workflows/ci.yml`：
-
-```yaml
-name: CI
-
-on:
-  push:
-    branches: [main, dev/*]
-  pull_request:
-    branches: [main]
-
-jobs:
-  lint-and-test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.12"]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-
-      - name: Lint with ruff
-        run: ruff check .
-
-      - name: Format check
-        run: ruff format --check .
-
-      - name: Type check with mypy
-        run: mypy openclaw_republic/
-
-      - name: Run tests
-        run: pytest -v
-```
-
-### Step 3：创建 Docker Compose 开发环境
+### Step 2：创建 Docker Compose 开发/部署环境
 
 创建 `Dockerfile`：
 
@@ -163,35 +118,35 @@ assets/
 docs/
 ```
 
-### Step 4：创建 Makefile
+### Step 3：创建 Makefile（本地快捷命令）
 
 ```makefile
-.PHONY: install dev lint format typecheck test docker-up docker-down clean
+.PHONY: install dev lint format typecheck test test-cov docker-up docker-down docker-test clean
 
 # 安装
 install:
-	pip install -e .
+	.venv\Scripts\pip.exe install -e .
 
 dev:
-	pip install -e ".[dev]"
-	pre-commit install
+	.venv\Scripts\pip.exe install -e ".[dev]"
+	.venv\Scripts\pre-commit.exe install
 
 # 代码质量
 lint:
-	ruff check .
+	.venv\Scripts\ruff.exe check .
 
 format:
-	ruff format .
+	.venv\Scripts\ruff.exe format .
 
 typecheck:
-	mypy openclaw_republic/
+	.venv\Scripts\mypy.exe openclaw_republic/
 
 # 测试
 test:
-	pytest -v
+	.venv\Scripts\pytest.exe -v
 
 test-cov:
-	pytest -v --cov=openclaw_republic --cov-report=term-missing
+	.venv\Scripts\pytest.exe -v --cov=openclaw_republic --cov-report=term-missing
 
 # Docker
 docker-up:
@@ -205,14 +160,15 @@ docker-test:
 
 # 清理
 clean:
-	find . -type d -name __pycache__ -exec rm -rf {} +
-	find . -type d -name .mypy_cache -exec rm -rf {} +
-	find . -type d -name .ruff_cache -exec rm -rf {} +
-	find . -type d -name .pytest_cache -exec rm -rf {} +
-	rm -rf dist/ build/ *.egg-info
+	powershell -Command "Get-ChildItem -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force"
+	powershell -Command "Get-ChildItem -Recurse -Directory -Filter .mypy_cache | Remove-Item -Recurse -Force"
+	powershell -Command "Get-ChildItem -Recurse -Directory -Filter .ruff_cache | Remove-Item -Recurse -Force"
+	powershell -Command "Get-ChildItem -Recurse -Directory -Filter .pytest_cache | Remove-Item -Recurse -Force"
 ```
 
-### Step 5：创建 `.gitignore`（更新）
+> **注意**：Makefile 中本地命令使用 `.venv` 路径，遵守环境规约。Docker 命令在容器内运行，不涉及本地 `.venv`。
+
+### Step 4：更新 `.gitignore`
 
 确保 `.gitignore` 覆盖所有开发工件：
 
@@ -231,7 +187,6 @@ build/
 venv/
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -259,14 +214,14 @@ Thumbs.db
 .env.local
 ```
 
-### Step 6：验证全链路
+### Step 5：验证全链路
 
 1. `make dev` — 安装开发依赖 + 激活 pre-commit
 2. `make lint` — ruff 检查通过
 3. `make typecheck` — mypy 检查通过
 4. `make test` — pytest 全绿
-5. `make docker-up` — Docker 容器启动成功
-6. `make docker-test` — 容器内测试通过
+5. `docker compose up --build` — 容器启动成功
+6. `docker compose run --rm app pytest -v` — 容器内测试通过
 7. 故意引入 lint 错误 → `git commit` → pre-commit 拦截 ✅
 
 ---
@@ -276,8 +231,7 @@ Thumbs.db
 | 文件 | 说明 |
 |------|------|
 | `.pre-commit-config.yaml` | pre-commit 钩子配置 |
-| `.github/workflows/ci.yml` | GitHub Actions CI 流水线 |
-| `Dockerfile` | 开发环境容器镜像 |
+| `Dockerfile` | 开发/部署容器镜像 |
 | `docker-compose.yml` | 开发环境编排 |
 | `.dockerignore` | Docker 构建排除规则 |
 | `Makefile` | 常用命令快捷方式 |
@@ -287,19 +241,18 @@ Thumbs.db
 
 ## 验收标准
 
-- [ ] `make dev` 成功安装所有开发依赖
-- [ ] `pre-commit run --all-files` 通过（或仅有预期的自动修复）
-- [ ] `make lint && make typecheck && make test` 全部通过
-- [ ] `docker compose up --build` 容器启动无报错
-- [ ] `docker compose run --rm app pytest -v` 容器内测试通过
-- [ ] `.github/workflows/ci.yml` 语法正确（可用 `actionlint` 校验）
-- [ ] `Makefile` 中所有 target 可正常执行
-- [ ] pre-commit 可拦截不合规的代码提交
+- [x] `make dev` 成功安装所有开发依赖 — ✅
+- [x] `pre-commit run --all-files` 通过 — ✅ ruff + mypy + hooks 全绿
+- [x] `make lint && make typecheck && make test` 全部通过 — ✅ 50 passed
+- [ ] `docker compose up --build` 容器启动 — ⏳ 待用户本地验证（需 Docker Desktop）
+- [ ] `docker compose run --rm app pytest -v` 容器内测试 — ⏳ 待用户本地验证
+- [x] pre-commit 可拦截不合规的代码提交 — ✅ hooks 已激活
 
 ---
 
 ## 不包含（由其他 Task / Phase 处理）
 
+- ❌ GitHub Actions CI（单人开发暂不需要，后续按需添加）
 - ❌ 生产部署配置（Nginx/Caddy 反代）（→ Phase 5）
 - ❌ 前端构建流程（→ Phase 3）
 - ❌ Redis / 数据库容器（→ Phase 2 按需添加）
@@ -311,3 +264,12 @@ Thumbs.db
 Task 0-C 完成后，Phase 0 全部完成 ✅
 
 进入 → [Phase 1 · 后端核心：三权 Agent 状态机](../phase1/phase1_overview.md)
+
+---
+
+## 完成记录
+
+- **完成时间**：2026-03-20
+- **验收结果**：4/6 通过（Docker 待用户本地验证）
+- **测试概况**：50 passed, mypy strict 0 errors, pre-commit all green
+- **额外修复**：7 个占位文件的泛型类型标注（mypy strict 兼容）、安装 types-PyYAML

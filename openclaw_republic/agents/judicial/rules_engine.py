@@ -5,12 +5,14 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 
 class RulesEngine:
     """违宪规则引擎 — 基于宪法配置进行合规校验。"""
 
     def __init__(self) -> None:
-        self.rules: list[dict] = []
+        self.rules: list[dict[str, Any]] = []
 
     def load_rules(self, constitution_path: str) -> None:
         """从宪法配置文件加载规则集。
@@ -20,7 +22,7 @@ class RulesEngine:
         """
         raise NotImplementedError
 
-    def check(self, action: dict) -> bool:
+    def check(self, action: dict[str, Any]) -> bool:
         """检查行政动作是否违反宪法规则。
 
         Args:

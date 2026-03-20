@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 
 class DebateEngine:
     """议会辩论引擎 — 管理辩论流程与表决。"""
@@ -20,7 +22,7 @@ class DebateEngine:
         """
         raise NotImplementedError
 
-    async def run_debate(self, topic: str, max_rounds: int = 5) -> dict:
+    async def run_debate(self, topic: str, max_rounds: int = 5) -> dict[str, Any]:
         """执行一轮完整辩论。
 
         Args:

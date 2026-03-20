@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from openclaw_republic.agents.base import BaseAgent
 
 
@@ -15,7 +17,7 @@ class President(BaseAgent):
     def __init__(self) -> None:
         super().__init__(name="President", role="executive.president")
 
-    async def review_act(self, act: dict) -> bool:
+    async def review_act(self, act: dict[str, Any]) -> bool:
         """审查法案，决定签署或否决。
 
         Args:

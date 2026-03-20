@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from openclaw_republic.agents.base import BaseAgent
 
 
@@ -14,7 +16,7 @@ class ChiefJustice(BaseAgent):
     def __init__(self) -> None:
         super().__init__(name="Chief Justice", role="judicial.chief_justice")
 
-    async def review(self, action: dict) -> dict:
+    async def review(self, action: dict[str, Any]) -> dict[str, Any]:
         """审查行政动作是否违宪。
 
         Args:

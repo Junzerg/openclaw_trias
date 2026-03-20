@@ -109,7 +109,7 @@ graph TD
       ]
     },
     {
-      "step": 2, 
+      "step": 2,
       "description": "深入爬取前 20 个高质量信源的全文内容",
       "tool": "WebBrowser"
     },
@@ -240,7 +240,7 @@ graph TD
         "queries": [
           "石油产业 2026 最新分析报告",
           "美伊关系 石油 影响 2026",
-          "oil industry analysis 2026",  
+          "oil industry analysis 2026",
           "US Iran relations oil market impact",
           "OPEC decision crude oil price 2026",
           "Iran sanctions oil production",
@@ -386,7 +386,7 @@ graph TD
 ```
 📝 生成中...
 ├── 一、全球石油产业总体趋势 ✅
-├── 二、美伊关系现状 ✅  
+├── 二、美伊关系现状 ✅
 ├── 三、美伊关系对石油产业的影响链路分析 ✅
 ├── 四、未来展望与风险提示 ✅
 └── 附录：参考信源列表 ✅
@@ -482,7 +482,7 @@ stateDiagram-v2
     [*] --> Petition : 用户提交请愿
     Petition --> Drafting : 议长接收
     Drafting --> Debating : 两派提案就绪
-    
+
     Debating --> Debating : Conflict Score ≥ 阈值, 继续辩论
     Debating --> Voted : Conflict Score < 阈值, 达成共识
 
@@ -529,7 +529,7 @@ stateDiagram-v2
 ````carousel
 ### 🏛️ 议会大厅
 ```
-[信使送信] → [激进派上台提案] → [保守派 Critique 气泡] 
+[信使送信] → [激进派上台提案] → [保守派 Critique 气泡]
 → [Lv1 辩论: 小人交替冒气泡] → [议长判定] → [敲槌 🔨 + 亮绿灯 ✅]
 → [卷轴经传送带发往白宫]
 ```
@@ -537,7 +537,7 @@ stateDiagram-v2
 ### 🏢 行政格子间
 ```
 [总统接收卷轴] → [检查 → 签字 → APPROVED 盖章 ✅]
-→ [国务卿疯狂敲键盘 ⌨️] → [屏幕闪烁搜索结果 & 网页内容]  
+→ [国务卿疯狂敲键盘 ⌨️] → [屏幕闪烁搜索结果 & 网页内容]
 → [停止敲键盘 → 捧报告交给总统]
 ```
 <!-- slide -->
