@@ -244,8 +244,8 @@ Thumbs.db
 - [x] `make dev` 成功安装所有开发依赖 — ✅
 - [x] `pre-commit run --all-files` 通过 — ✅ ruff + mypy + hooks 全绿
 - [x] `make lint && make typecheck && make test` 全部通过 — ✅ 50 passed
-- [ ] `docker compose up --build` 容器启动 — ⏳ 待用户本地验证（需 Docker Desktop）
-- [ ] `docker compose run --rm app pytest -v` 容器内测试 — ⏳ 待用户本地验证
+- [x] `docker compose up --build` 容器启动 — ✅ 80.5s
+- [x] `docker compose run --rm app pytest -v` 容器内测试 — ✅ 50 passed in 1.26s
 - [x] pre-commit 可拦截不合规的代码提交 — ✅ hooks 已激活
 
 ---
@@ -270,6 +270,6 @@ Task 0-C 完成后，Phase 0 全部完成 ✅
 ## 完成记录
 
 - **完成时间**：2026-03-20
-- **验收结果**：4/6 通过（Docker 待用户本地验证）
-- **测试概况**：50 passed, mypy strict 0 errors, pre-commit all green
-- **额外修复**：7 个占位文件的泛型类型标注（mypy strict 兼容）、安装 types-PyYAML
+- **验收结果**：6/6 全部通过
+- **测试概况**：50 passed, mypy strict 0 errors, pre-commit all green, Docker 50 passed in 1.26s
+- **额外修复**：7 个占位文件的泛型类型标注（mypy strict 兼容）、安装 types-PyYAML、Dockerfile 修复 COPY 顺序
