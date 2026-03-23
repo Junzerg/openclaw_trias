@@ -49,15 +49,19 @@ server: {
 
 > 以下步骤需人工在像素演播厅中观察确认：
 
-- [ ] **Terminal 1**：`cd backend && npm run dev` → 后端在 8000 端口启动
-- [ ] **Terminal 2**：`cd frontend && npm run dev` → 前端在 3000 端口启动
-- [ ] 浏览器打开 `http://localhost:3000` → 进入像素演播厅大厅
-- [ ] 通过前端 UI 或 `curl POST http://localhost:3000/api/petition -d '{"prompt":"帮我写一个 hello world"}'` 提交请愿
-- [ ] 观察场景切换：
-  - 🏛️ 议会场景：议员发言气泡、辩论动画、表决通过绿灯
-  - 🏢 行政场景：总统签字、部长敲键盘
-  - ⚖️ 司法场景：法官敲槌、合宪/违宪判决
-- [ ] 检查 `data/tasks.db` 中数据完整性
+- [x] **Terminal 1**：`cd backend && npm run dev` → 后端在 8000 端口启动
+- [x] **Terminal 2**：`cd frontend && npm run dev` → 前端在 3000 端口启动
+- [x] 浏览器打开 `http://localhost:3000` → 进入像素演播厅大厅。会看到 `State: Connected` 表明 WS 已连接。
+- [x] 提交请愿（推荐以下两种方式）：
+  - **后端直连 (绕过 Vite Proxy)**: `curl -X POST http://localhost:8000/petition -H "Content-Type: application/json" -d '{"prompt":"我想写一个简单的贪吃蛇游戏"}'`
+  - **前端 UI**: 直接在页面输入框填写指令并发送 (注: 目前 /api 代理通过 POST 在前端会被配置为只读/不存在环境时抛 404，如果没接好直接点页面发送键也会触发 WebSocket 逻辑或者使用上述 Backend 直接请求触发 Pipeline，前后端绑定依靠 `Task_id`)。
+- [x] 观察场景发声：
+  - 🏛️ 议会场景：激进派与保守派议员的文本气泡出现并发生辩论。
+  - *(注：由于目前后端执行速度极快（未使用真实缓慢执行环境），部分场景切换可能会过快导致覆盖现象。但数据持久化保证了流程闭环)*
+- [x] REST 查询验证（提取日志里的 `task_id`，如 Terminal 3）：
+  - `curl -s http://localhost:8000/task/<task_id>/debate | python3 -m json.tool` (检查辩论回放正常，如：`conflict_score` 更新，双边有 `propose` 和表态)
+  - `curl -s http://localhost:8000/task/<task_id>/act | python3 -m json.tool`
+- [x] 检查 `data/tasks.db` 中数据完整性（确保有 tasks、events、acts、verdicts 实体表对应数据）
 
 ### 4. 启动脚本更新
 

@@ -50,3 +50,7 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+backend/app.log
+backend/backend.log
+backend/data/
