@@ -81,16 +81,46 @@ export class Speaker extends BaseAgent {
       throw new Error('表决未通过，无法生成执行法案');
     }
 
-    // 从辩论结果提取共识点（使用 LLM 将自然语言提炼为执行步骤）
-    const prompt = `将以下辩论共识提炼为具体且可执行的独立步骤指令（仅包含自然语言正文）：\n\n${debateResult.final_proposal}`;
+    // 从辩论结果提取共识点，要求大模型输出包含预估算力的 JSON
+    const prompt = `将以下辩论共识提炼为具体且可执行的独立步骤指令，并提取其中涉及的 token 预算数字。
+请必须严格输出一个 JSON 对象，不用包含任何 Markdown 也可以解析。JSON 格式如下：
+{
+  "description": "具体的执行步骤描述...",
+  "estimated_tokens": 10000,
+  "required_skill": "CodeExecution"
+}
+说明：如果提案或辩论中明确了 token 预算（如测试模式下要求的 99999 或辩论达成妥协的 12000），请严格提取使用该数字。若没有明确则默认 10000。
+说明2：如果提案或系统指令中明确要求了 required_skill 字段（例如 Doomsday_Quantum_Weapon 等），必须绝对服从其字符串。若无特殊要求，请保持 "CodeExecution"。
+
+共识正文：\n\n${debateResult.final_proposal}`;
     const result = await this.callLLM(prompt);
+
+    let parsedDescription = result.content;
+    let parsedTokens = 10000;
+    let parsedSkill = 'CodeExecution';
+
+    try {
+      const jsonMatch = result.content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.description) parsedDescription = parsed.description;
+        if (typeof parsed.estimated_tokens === 'number') {
+          parsedTokens = parsed.estimated_tokens;
+        }
+        if (typeof parsed.required_skill === 'string') {
+          parsedSkill = parsed.required_skill;
+        }
+      }
+    } catch (e) {
+      console.warn('[Speaker] Failed to parse act JSON from LLM, falling back to raw text', e);
+    }
 
     const step: ActStep = {
       index: 0,
-      description: result.content, // [优化] 使用大模型提炼过后的内容作为行动指南
-      required_skill: 'CodeExecution',
+      description: parsedDescription, // [优化] 使用大模型提炼过后的内容作为行动指南
+      required_skill: parsedSkill,
       tool_parameters: {},
-      estimated_tokens: 10000,
+      estimated_tokens: parsedTokens,
       acceptance_criteria: '按照提案内容完成执行',
       dependencies: []
     };

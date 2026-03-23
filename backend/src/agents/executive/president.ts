@@ -63,11 +63,17 @@ export class President extends BaseAgent {
       `.trim();
 
       const response = await this.callLLM(prompt);
-      const content = response.content.trim();
+      const content = response.content.trim().toUpperCase();
       
-      if (content.startsWith('[VETO')) {
-        const reasonStr = content.replace(/^\[VETO[:：]?\s*/i, '').replace(/\]$/, '').trim();
+      // 容错提取：不再苛求作为必须的物理头字符，只要回复中明确包含了 VETO 的控制字缀
+      if (content.includes('[VETO')) {
+        // 使用正则提取出 [VETO: xxx] 中间的核心理由，允许前后有冗余噪音
+        const match = response.content.match(/\[VETO[:：]?\s*([^\]]+)\]/i);
+        const reasonStr = match ? match[1].trim() : "大模型未按严格格式提供理由，但行使了否决权";
         issues.push(`LLM 裁定否决: ${reasonStr}`);
+      } else if (content.includes('否决')) {
+        // 极致降级容错：如果大模型彻底忘了写 [VETO] 标签，只输出了诸如“本总统行使否决权”
+        issues.push(`LLM 裁定否决: 大模型表达了强烈的否决意图`);
       }
     }
 

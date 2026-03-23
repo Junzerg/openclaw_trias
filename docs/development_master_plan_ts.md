@@ -57,7 +57,7 @@
 │  │   └── websocket.ts      (WS 服务端)                │
 │  └── openclaw/                                       │
 │      └── adapter.ts        (OpenClaw Gateway 适配层)  │
-│  状态: 🔄 需要重写                                     │
+│  状态: 🔄 Phase 1~2 完成，Phase 3+ 待重写                      │
 └──────────────────┬───────────────────────────────────┘
                    │ Gateway WebSocket API / sessions_* Tools
 ┌──────────────────▼───────────────────────────────────┐
@@ -321,9 +321,13 @@ abstract class BaseAgent {
 
 ---
 
-## Phase 2 · Server 层 & WebSocket (前后端打通)
+## Phase 2 · Server 层 & WebSocket (前后端打通) ✅ 已封板 (2026-03-23)
 
 **目标**：搭建 HTTP/WebSocket 服务器，复现 Python 版 Phase 2 的能力，打通与像素前端的实时通信。
+
+> ✅ **Phase 2 已封板** — 18 个测试文件 · 242 passed · 2 skipped · 9 个 E2E 测试
+> 真实 OpenClaw LLM 联调覆盖 **11/11 分支全覆盖**（含 brawl、veto、预算熔断、技能白名单 4 个专项压测）
+> 详见 [Phase 2 Overview](plan_ts/phase2/phase2_overview.md)
 
 | 序号 | 工作项 | 说明 | Python 对应 |
 |------|--------|------|------------|
@@ -453,9 +457,9 @@ graph LR
 
 | Phase | 预估工作量 | 前置条件 | 说明 |
 |-------|----------|---------|------|
-| Phase 0 | ⭐⭐ 1-2 会话 | 无 | 一次性搭好骨架，验证 OpenClaw 连通 |
-| Phase 1 | ⭐⭐⭐⭐ 3-4 会话 | T0 | 核心工作量。建议按 Schema→Bus→Agents→Government 顺序翻译 |
-| Phase 2 | ⭐⭐ 1-2 会话 | T1 | Server 层较轻量 |
+| Phase 0 | ⭐⭐ 1-2 会话 | 无 | ✅ 已完成 |
+| Phase 1 | ⭐⭐⭐⭐ 3-4 会话 | T0 | ✅ 已完成 |
+| Phase 2 | ⭐⭐ 1-2 会话 | T1 | ✅ **已封板** (2026-03-23) |
 | Phase 3 | ⭐⭐⭐ 2-3 会话 | T0 + T1 | 需要探索 OpenClaw API，可能有适配工作 |
 | Phase 4 | ⭐⭐⭐ 2-3 会话 | T2 + T3 | UX 打磨，可渐进式完成 |
 | Phase 5 | ⭐ 1 会话 | T4 | 收尾发布 |

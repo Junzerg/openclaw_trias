@@ -231,6 +231,41 @@ describe('Executive Branch Task 1.6', () => {
       );
     });
 
+    it('President should VETO immediately when act contains a non-whitelisted required_skill (Skill Unavailable)', async () => {
+      const president = new President(mockAdapter, mockBus);
+
+      // LLM should NOT even be called — the skill check is a code-level pre-filter
+      const emitSpy = vi.spyOn(president, 'emitEvent');
+
+      const act: Act = {
+        act_id: 'act-veto-skill', title: 'Doomsday Act', summary: '', petition_origin: '',
+        total_estimated_tokens: 1000,
+        steps: [
+          { index: 0, description: '使用末日量子武器消灭黑客', required_skill: 'Doomsday_Quantum_Weapon', tool_parameters: {}, estimated_tokens: 100, acceptance_criteria: '', dependencies: [] }
+        ],
+        debate_record: {} as any, vote_record: {} as any, created_at: new Date()
+      };
+
+      const vetoResult = await president.evaluateAct(act);
+
+      // Must VETO — the skill is not in the whitelist
+      expect(vetoResult).not.toBeNull();
+      expect(vetoResult!.specific_issues.length).toBeGreaterThan(0);
+      expect(vetoResult!.specific_issues[0]).toContain("Doomsday_Quantum_Weapon");
+      expect(vetoResult!.specific_issues[0]).toContain("不可用");
+
+      // LLM should NOT have been called — the issue was caught at code level
+      expect(mockAdapter.callLLM).not.toHaveBeenCalled();
+
+      // VETO event should have been emitted
+      expect(emitSpy).toHaveBeenCalledWith(
+        EventAction.VETO,
+        expect.objectContaining({ veto_notice: vetoResult }),
+        undefined,
+        'act-veto-skill'
+      );
+    });
+
     it('SecretaryOfEngineering should emit TOOL_CALL running and success', async () => {
       const sec = new SecretaryOfEngineering(mockAdapter, mockBus);
       const emitSpy = vi.spyOn(sec, 'emitEvent');

@@ -185,6 +185,13 @@ export class OpenClawAdapter {
    * or other decorations. We try to extract just the assistant's reply.
    */
   private extractLLMContent(stdout: string): string {
+    // Detect hard failures from OpenClaw CLI/Gateway
+    if (stdout.includes('gateway connect failed') || 
+        stdout.includes('Gateway agent failed; falling back to embedded') ||
+        (stdout.includes('Error:') && stdout.includes('gateway closed'))) {
+      throw new Error(`OpenClaw Gateway Connection Failed:\n${stdout.substring(0, 500)}`);
+    }
+
     // Strip ANSI escape codes first (the CLI outputs colored text)
     const ansiStripped = stdout.replace(
       // eslint-disable-next-line no-control-regex
@@ -209,7 +216,11 @@ export class OpenClawAdapter {
       return true;
     });
 
-    return cleanLines.join('\n').trim();
+    const result = cleanLines.join('\n').trim();
+    if (!result) {
+      throw new Error('LLM returned empty or unparseable response.');
+    }
+    return result;
   }
 
   // ── Code Execution ───────────────────────────────────────────────────────

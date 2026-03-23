@@ -83,6 +83,12 @@ export function createWsBridge(wsManager: IConnectionManager): Handler {
   return async function _wsBridge(event: BaseEvent): Promise<void> {
     if (!event.task_id) return;
 
+    // 添加实时打印，方便在终端查看执行过程
+    console.log(`[Bus Event] ${event.action.toUpperCase()} from ${event.source_agent}`);
+    if (event.payload && typeof event.payload === 'object' && 'statement' in event.payload) {
+      console.log(`💬  ${event.payload.statement}`);
+    }
+
     try {
       const wsPayload = serializeEvent(event);
       await wsManager.broadcast(event.task_id, wsPayload);
@@ -119,13 +125,19 @@ export function createDbBridge(taskStore: ITaskStore): Handler {
         payloadStr,
       );
 
-      // 2. vote_passed → 自动存储法案
+      // 2. state_change → 同步更新 tasks 表的 bill_state 字段
+      if (event.action === EventAction.STATE_CHANGE && event.payload?.state) {
+        const newState = String(event.payload.state);
+        await taskStore.updateTask(event.task_id, { bill_state: newState });
+      }
+
+      // 3. vote_passed → 自动存储法案
       if (event.action === EventAction.VOTE_PASSED && event.payload?.act) {
         const actJson = JSON.stringify(event.payload.act);
         await taskStore.storeAct(event.task_id, actJson);
       }
 
-      // 3. constitutional/unconstitutional → 自动存储判决
+      // 4. constitutional/unconstitutional → 自动存储判决
       if (
         (event.action === EventAction.CONSTITUTIONAL || event.action === EventAction.UNCONSTITUTIONAL) &&
         event.payload?.verdict

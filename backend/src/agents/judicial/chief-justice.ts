@@ -41,6 +41,9 @@ export class ChiefJustice extends BaseAgent {
   }
 
   private _createDeviationScorer(): DeviationScorer {
+    const MAX_SCORER_RETRIES = 2;
+    const SAFE_DEFAULT_SCORE = 0.0; // 安全默认：无偏离（避免误判违宪）
+
     return async (petition: string, output: string): Promise<number> => {
       const prompt = `
 请作为最高法院的大法官，严格审查执行产出与选民原始请愿的匹配度。
@@ -66,24 +69,35 @@ JSON 格式如下：
   "reason": "<在此填写严厉的审查摘要>"
 }
 `;
-      try {
-        const response = await this.callLLM(prompt);
-        // Try parsing JSON out of it
-        const content = response.content.trim();
-        // Sometimes LLMs still wrap in ```json ... ``` despite instructions
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        const jsonStr = jsonMatch ? jsonMatch[0] : content;
-        
-        const parsed = JSON.parse(jsonStr);
-        if (parsed && parsed.score !== undefined) {
-          const numScore = Number(parsed.score);
-          if (!isNaN(numScore)) return numScore;
+
+      for (let attempt = 1; attempt <= MAX_SCORER_RETRIES; attempt++) {
+        try {
+          const response = await this.callLLM(prompt);
+          const content = response.content.trim();
+          // Sometimes LLMs still wrap in ```json ... ``` despite instructions
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          const jsonStr = jsonMatch ? jsonMatch[0] : content;
+
+          const parsed = JSON.parse(jsonStr);
+          if (parsed && parsed.score !== undefined) {
+            const numScore = Number(parsed.score);
+            if (!isNaN(numScore)) return numScore;
+          }
+          // JSON parsed but no valid score — try again
+          console.warn(`[ChiefJustice] Deviation scorer: valid JSON but missing score (attempt ${attempt}/${MAX_SCORER_RETRIES})`);
+        } catch (err) {
+          console.warn(
+            `[ChiefJustice] Deviation scorer parse error (attempt ${attempt}/${MAX_SCORER_RETRIES}):`,
+            err instanceof Error ? err.message : err,
+          );
+          // If we still have retries left, try again
+          if (attempt < MAX_SCORER_RETRIES) continue;
         }
-        return 0.5; // fallback
-      } catch (err) {
-        console.error('[ChiefJustice] Deviation scorer LLM parsing error:', err);
-        return 0.5; // fallback
       }
+
+      // All retries exhausted — use safe default (no deviation → constitutional)
+      console.warn(`[ChiefJustice] Deviation scorer exhausted ${MAX_SCORER_RETRIES} retries, using safe default score ${SAFE_DEFAULT_SCORE}`);
+      return SAFE_DEFAULT_SCORE;
     };
   }
 
