@@ -11,6 +11,7 @@ export enum EventAction {
   CONSTITUTIONAL = 'constitutional',
   UNCONSTITUTIONAL = 'unconstitutional',
   STATE_CHANGE = 'state_change',
+  LLM_THINKING = 'llm_thinking',
 }
 
 export enum EmotionType {

@@ -3,6 +3,7 @@ import { loadConstitution, loadSoul, clearConfigCache } from '../src/config/load
 import { BaseAgent, Branch, Permission, PermissionDeniedError } from '../src/agents/base';
 import { OpenClawAdapter, LLMResponse } from '../src/openclaw/adapter';
 import { MessageBus } from '../src/bus/message-bus';
+import { EventAction, type BaseEvent } from '../src/schemas/events';
 import { join } from 'node:path';
 import { writeFileSync, unlinkSync, mkdirSync, existsSync } from 'node:fs';
 
@@ -110,5 +111,52 @@ describe('BaseAgent', () => {
     expect(event.action).toBe('tool_call');
     expect(event.payload.tool).toBe('abc');
     expect(spy).toHaveBeenCalledWith('execution', event);
+  });
+
+  it('should publish llm_thinking heartbeat during slow callLLM', async () => {
+    vi.useFakeTimers();
+    const publishSpy = vi.spyOn(bus, 'publish');
+
+    // Make callLLM take "6+ seconds" (fake-time)
+    vi.spyOn(adapter, 'callLLM').mockImplementation(() => {
+      return new Promise((resolve) => {
+        setTimeout(() => resolve({ content: 'ok', rawOutput: 'ok' }), 7000);
+      });
+    });
+
+    const agent = new DummyAgent('Dummy', 'dummy', Branch.LEGISLATIVE, [Permission.PLAN], adapter, bus, false);
+    agent.systemPrompt = 'test';
+
+    const promise = agent.publicCallLLM('hello');
+
+    // Advance 3s → first heartbeat
+    await vi.advanceTimersByTimeAsync(3000);
+    const heartbeatCalls = publishSpy.mock.calls.filter(
+      ([topic, evt]) => topic === 'lifecycle' && (evt as BaseEvent).action === EventAction.LLM_THINKING
+    );
+    expect(heartbeatCalls.length).toBe(1);
+    expect((heartbeatCalls[0][1] as BaseEvent).source_agent).toBe('dummy');
+    expect((heartbeatCalls[0][1] as BaseEvent).payload.elapsed_seconds).toBe(3);
+
+    // Advance 3s more → second heartbeat
+    await vi.advanceTimersByTimeAsync(3000);
+    const heartbeatCalls2 = publishSpy.mock.calls.filter(
+      ([topic, evt]) => topic === 'lifecycle' && (evt as BaseEvent).action === EventAction.LLM_THINKING
+    );
+    expect(heartbeatCalls2.length).toBe(2);
+
+    // Advance past the 7s mark → callLLM resolves
+    await vi.advanceTimersByTimeAsync(2000);
+    const result = await promise;
+    expect(result.content).toBe('ok');
+
+    // After resolution, no more heartbeats should fire
+    const finalCount = publishSpy.mock.calls.filter(
+      ([topic, evt]) => topic === 'lifecycle' && (evt as BaseEvent).action === EventAction.LLM_THINKING
+    ).length;
+    // Should be exactly 2 (at 3s and 6s), not 3 (no 9s tick since callLLM resolved at 7s)
+    expect(finalCount).toBe(2);
+
+    vi.useRealTimers();
   });
 });

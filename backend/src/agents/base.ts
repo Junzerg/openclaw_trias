@@ -90,8 +90,33 @@ export abstract class BaseAgent {
 
   // ----- LLM Interop -----
   protected async callLLM(prompt: string): Promise<LLMResponse> {
-    // This is the revolutionary part replacing Python mocked returns!
-    return await this.adapter.callLLM(this.systemPrompt, prompt);
+    const heartbeat = this.startProgressHeartbeat();
+    try {
+      return await this.adapter.callLLM(this.systemPrompt, prompt);
+    } finally {
+      clearInterval(heartbeat);
+    }
+  }
+
+  /**
+   * Publish `llm_thinking` heartbeat events every 3 s while an LLM call is in flight.
+   * Allows frontends to show "thinking…" indicators and detect stalled calls.
+   */
+  private startProgressHeartbeat(): NodeJS.Timeout {
+    let elapsed = 0;
+    return setInterval(() => {
+      elapsed += 3;
+      if (this.bus) {
+        this.bus.publish('lifecycle', {
+          action: EventAction.LLM_THINKING,
+          source_agent: this.role,
+          payload: { elapsed_seconds: elapsed },
+          timestamp: new Date(),
+          intensity: 0,
+          emotion: EmotionType.NEUTRAL,
+        }).catch(() => {});
+      }
+    }, 3000);
   }
 
   // ----- Lifecycle & Processing -----

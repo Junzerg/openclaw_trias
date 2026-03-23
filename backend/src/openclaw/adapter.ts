@@ -1,19 +1,20 @@
 /**
- * OpenClaw Gateway Adapter — Minimal integration layer (Phase T0)
+ * OpenClaw Gateway Adapter — Minimal integration layer (Phase T0 → T3.1)
  *
  * Strategy: Use `openclaw` CLI as a subprocess for LLM calls and code execution.
- * This avoids the complexity of the full WebSocket handshake (device pairing,
- * challenge signing, etc.) while still validating the end-to-end pipeline.
+ * Phase 3.1 upgrade: async `spawn` via `ITransport` (no more `execSync` / tmp files).
  *
- * Phase T3 will upgrade this to direct WebSocket communication for streaming
- * and finer-grained control. The public API (`callLLM`, `executeCode`) stays
- * the same — only the transport layer changes.
+ * Phase T4 will upgrade the transport to direct WebSocket communication for
+ * streaming and finer-grained control. The public API (`callLLM`, `executeCode`)
+ * stays the same — only the transport layer changes.
  */
 
-import { execSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { readFileSync, unlinkSync } from 'node:fs';
 import WebSocket from 'ws';
+import { CliTransport, type ITransport } from './transport.js';
+
+// ─── Re-exports ──────────────────────────────────────────────────────────────
+
+export { CliTransport, type ITransport } from './transport.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -67,9 +68,11 @@ const DEFAULT_CONFIG: OpenClawAdapterConfig = {
 
 export class OpenClawAdapter {
   private config: OpenClawAdapterConfig;
+  private transport: ITransport;
 
-  constructor(config?: Partial<OpenClawAdapterConfig>) {
+  constructor(config?: Partial<OpenClawAdapterConfig>, transport?: ITransport) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.transport = transport ?? new CliTransport(this.config.cliBin);
   }
 
   // ── Health Check ─────────────────────────────────────────────────────────
@@ -86,10 +89,17 @@ export class OpenClawAdapter {
 
     // 1. Check CLI availability
     try {
-      const output = this.runCliCommand(['--version']);
+      const output = await this.runCliCommand(['--version']);
       if (output) {
         result.cli = true;
-        result.details += `CLI version: ${this.extractLLMContent(output) || output.trim()}\n`;
+        // extractLLMContent may throw on banner-only output — fallback to raw
+        let versionInfo: string;
+        try {
+          versionInfo = this.extractLLMContent(output);
+        } catch {
+          versionInfo = output.trim().substring(0, 200);
+        }
+        result.details += `CLI version: ${versionInfo}\n`;
       } else {
         result.details += `CLI not available: no output\n`;
         return result;
@@ -119,19 +129,27 @@ export class OpenClawAdapter {
    */
   private pingGateway(): Promise<void> {
     return new Promise((resolve, reject) => {
+      let settled = false;
       const ws = new WebSocket(this.config.gatewayUrl);
       const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
         ws.close();
         reject(new Error('Gateway connection timeout (5s)'));
       }, 5000);
+      timer.unref();
 
       ws.on('open', () => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
         ws.close();
         resolve();
       });
 
       ws.on('error', (err) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
         reject(err);
       });
@@ -146,7 +164,7 @@ export class OpenClawAdapter {
    * Uses: `openclaw agent --message "<prompt>"`
    *
    * The system prompt is prepended to the user message as context.
-   * In Phase T3, this will use the WebSocket API with proper session management.
+   * In Phase T4, this will use the WebSocket API with proper session management.
    */
   async callLLM(systemPrompt: string, userMessage: string): Promise<LLMResponse> {
     // Compose the full prompt with system context
@@ -166,7 +184,7 @@ export class OpenClawAdapter {
     }
 
     try {
-      const rawOutput = this.runCliCommand(args);
+      const rawOutput = await this.runCliCommand(args);
       const content = this.extractLLMContent(rawOutput);
 
       return {
@@ -185,13 +203,6 @@ export class OpenClawAdapter {
    * or other decorations. We try to extract just the assistant's reply.
    */
   private extractLLMContent(stdout: string): string {
-    // Detect hard failures from OpenClaw CLI/Gateway
-    if (stdout.includes('gateway connect failed') || 
-        stdout.includes('Gateway agent failed; falling back to embedded') ||
-        (stdout.includes('Error:') && stdout.includes('gateway closed'))) {
-      throw new Error(`OpenClaw Gateway Connection Failed:\n${stdout.substring(0, 500)}`);
-    }
-
     // Strip ANSI escape codes first (the CLI outputs colored text)
     const ansiStripped = stdout.replace(
       // eslint-disable-next-line no-control-regex
@@ -217,6 +228,20 @@ export class OpenClawAdapter {
     });
 
     const result = cleanLines.join('\n').trim();
+
+    // Detect hard failures from OpenClaw CLI/Gateway
+    // Check AFTER filtering so stderr noise lines (which are already stripped)
+    // don't cause false positives. Use line-start anchors for precision.
+    const hasGatewayFailure = cleanLines.some((line) => {
+      const t = line.trim();
+      return t.startsWith('gateway connect failed') ||
+             t.startsWith('Gateway agent failed; falling back to embedded') ||
+             (t.startsWith('Error:') && t.includes('gateway closed'));
+    });
+    if (hasGatewayFailure) {
+      throw new Error(`OpenClaw Gateway Connection Failed:\n${result.substring(0, 500)}`);
+    }
+
     if (!result) {
       throw new Error('LLM returned empty or unparseable response.');
     }
@@ -270,7 +295,7 @@ export class OpenClawAdapter {
     const args = ['agent', '--agent', this.config.agentId, '--message', prompt];
 
     try {
-      const rawOutput = this.runCliCommand(args);
+      const rawOutput = await this.runCliCommand(args);
       const parsedOutput = this.extractLLMContent(rawOutput);
       return {
         stdout: parsedOutput,
@@ -286,37 +311,12 @@ export class OpenClawAdapter {
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   /**
-   * Run an OpenClaw CLI command and capture all output reliably.
+   * Run an OpenClaw CLI command asynchronously via the injected transport.
    *
-   * Uses `execSync` with shell redirection to a temp file, because the
-   * OpenClaw CLI uses advanced terminal I/O that `execFile` / `execFileAsync`
-   * cannot capture in certain environments (e.g., Vitest worker threads).
+   * Phase 3.1: Replaced `execSync` + temp file with `ITransport.send()`.
    */
-  private runCliCommand(args: string[]): string {
-    const tmpFile = `/tmp/openclaw-out-${randomUUID()}.txt`;
-    // Shell-escape each arg (wrap in single quotes, escape inner single quotes)
-    const escaped = args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(' ');
-    const cmd = `${this.config.cliBin} ${escaped} > ${tmpFile} 2>&1`;
-
-    try {
-      execSync(cmd, {
-        timeout: this.config.timeoutSeconds * 1000,
-        maxBuffer: 10 * 1024 * 1024,
-        env: { ...process.env },
-        shell: '/bin/bash',
-        stdio: 'pipe',
-      });
-    } catch {
-      // CLI may exit non-zero; we still want to read the output
-    }
-
-    try {
-      const output = readFileSync(tmpFile, 'utf-8');
-      unlinkSync(tmpFile);
-      return output;
-    } catch {
-      return '';
-    }
+  private async runCliCommand(args: string[]): Promise<string> {
+    return this.transport.send(args, this.config.timeoutSeconds * 1000);
   }
 
   private wrapError(method: string, err: unknown): Error {
@@ -334,7 +334,7 @@ const isMainModule = process.argv[1]?.endsWith('adapter.ts') ||
 
 if (isMainModule) {
   (async () => {
-  console.log('🦞 OpenClaw Adapter — Smoke Test\\n');
+  console.log('🦞 OpenClaw Adapter — Smoke Test\n');
   console.log('='.repeat(60));
 
   const adapter = new OpenClawAdapter();
@@ -392,6 +392,6 @@ if (isMainModule) {
   }
 
   console.log('\n' + '='.repeat(60));
-  console.log('🏁 Smoke test complete.\\n');
+  console.log('🏁 Smoke test complete.\n');
   })();
 }
