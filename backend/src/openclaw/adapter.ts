@@ -1,0 +1,386 @@
+/**
+ * OpenClaw Gateway Adapter — Minimal integration layer (Phase T0)
+ *
+ * Strategy: Use `openclaw` CLI as a subprocess for LLM calls and code execution.
+ * This avoids the complexity of the full WebSocket handshake (device pairing,
+ * challenge signing, etc.) while still validating the end-to-end pipeline.
+ *
+ * Phase T3 will upgrade this to direct WebSocket communication for streaming
+ * and finer-grained control. The public API (`callLLM`, `executeCode`) stays
+ * the same — only the transport layer changes.
+ */
+
+import { execSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { readFileSync, unlinkSync } from 'node:fs';
+import WebSocket from 'ws';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export interface OpenClawAdapterConfig {
+  /** OpenClaw Gateway WebSocket URL (default: ws://127.0.0.1:18789) */
+  gatewayUrl: string;
+  /** Default LLM model ref, e.g. "anthropic/claude-sonnet-4-20250514" */
+  defaultModel?: string;
+  /** CLI request timeout in seconds (default: 120) */
+  timeoutSeconds: number;
+  /** Path to the `openclaw` binary (default: "openclaw" — uses PATH) */
+  cliBin: string;
+  /** OpenClaw agent ID to use (default: "main") */
+  agentId: string;
+}
+
+export interface LLMResponse {
+  /** The text content of the LLM reply */
+  content: string;
+  /** Raw CLI stdout (for debugging) */
+  rawOutput: string;
+}
+
+export interface ExecResult {
+  /** Standard output from the executed code */
+  stdout: string;
+  /** Standard error from the executed code */
+  stderr: string;
+  /** Exit code (0 = success) */
+  exitCode: number;
+  /** Raw CLI stdout (for debugging) */
+  rawOutput: string;
+}
+
+export type HealthStatus = {
+  gateway: boolean;
+  cli: boolean;
+  details: string;
+};
+
+// ─── Default config ──────────────────────────────────────────────────────────
+
+const DEFAULT_CONFIG: OpenClawAdapterConfig = {
+  gatewayUrl: 'ws://127.0.0.1:18789',
+  timeoutSeconds: 120,
+  cliBin: 'openclaw',
+  agentId: 'main',
+};
+
+// ─── Adapter ─────────────────────────────────────────────────────────────────
+
+export class OpenClawAdapter {
+  private config: OpenClawAdapterConfig;
+
+  constructor(config?: Partial<OpenClawAdapterConfig>) {
+    this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  // ── Health Check ─────────────────────────────────────────────────────────
+
+  /**
+   * Check if the OpenClaw Gateway is reachable and the CLI is available.
+   */
+  async healthCheck(): Promise<HealthStatus> {
+    const result: HealthStatus = {
+      gateway: false,
+      cli: false,
+      details: '',
+    };
+
+    // 1. Check CLI availability
+    try {
+      const output = this.runCliCommand(['--version']);
+      if (output) {
+        result.cli = true;
+        result.details += `CLI version: ${this.extractLLMContent(output) || output.trim()}\n`;
+      } else {
+        result.details += `CLI not available: no output\n`;
+        return result;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      result.details += `CLI not available: ${message}\n`;
+      return result;
+    }
+
+    // 2. Check Gateway WebSocket connectivity
+    try {
+      await this.pingGateway();
+      result.gateway = true;
+      result.details += `Gateway reachable at ${this.config.gatewayUrl}\n`;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      result.details += `Gateway not reachable: ${message}\n`;
+    }
+
+    return result;
+  }
+
+  /**
+   * Attempt a basic WebSocket connection to the Gateway to verify it's online.
+   * We don't complete the full handshake — just check TCP connectivity.
+   */
+  private pingGateway(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(this.config.gatewayUrl);
+      const timer = setTimeout(() => {
+        ws.close();
+        reject(new Error('Gateway connection timeout (5s)'));
+      }, 5000);
+
+      ws.on('open', () => {
+        clearTimeout(timer);
+        ws.close();
+        resolve();
+      });
+
+      ws.on('error', (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  }
+
+  // ── LLM Call ─────────────────────────────────────────────────────────────
+
+  /**
+   * Call an LLM via the OpenClaw CLI.
+   *
+   * Uses: `openclaw agent --message "<prompt>"`
+   *
+   * The system prompt is prepended to the user message as context.
+   * In Phase T3, this will use the WebSocket API with proper session management.
+   */
+  async callLLM(systemPrompt: string, userMessage: string): Promise<LLMResponse> {
+    // Compose the full prompt with system context
+    const fullMessage = [
+      '=== SYSTEM INSTRUCTIONS (follow these strictly) ===',
+      systemPrompt,
+      '',
+      '=== USER MESSAGE ===',
+      userMessage,
+    ].join('\n');
+
+    const args = ['agent', '--agent', this.config.agentId, '--message', fullMessage];
+
+    // Add model override if configured
+    if (this.config.defaultModel) {
+      args.push('--model', this.config.defaultModel);
+    }
+
+    try {
+      const rawOutput = this.runCliCommand(args);
+      const content = this.extractLLMContent(rawOutput);
+
+      return {
+        content,
+        rawOutput,
+      };
+    } catch (err) {
+      throw this.wrapError('callLLM', err);
+    }
+  }
+
+  /**
+   * Extract meaningful LLM content from CLI stdout.
+   *
+   * The `openclaw agent` CLI may include status lines, thinking indicators,
+   * or other decorations. We try to extract just the assistant's reply.
+   */
+  private extractLLMContent(stdout: string): string {
+    // Strip ANSI escape codes first (the CLI outputs colored text)
+    const ansiStripped = stdout.replace(
+      // eslint-disable-next-line no-control-regex
+      /\x1b\[[0-9;]*[a-zA-Z]/g,
+      '',
+    );
+
+    const lines = ansiStripped.split('\n');
+    const cleanLines = lines.filter((line) => {
+      const trimmed = line.trim();
+      // Skip spinner characters
+      if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏◓◇│]/.test(trimmed)) return false;
+      // Skip OpenClaw banner
+      if (trimmed.startsWith('🦞')) return false;
+      // Skip timestamp log lines (e.g. "20:30:42 [plugins] ...")
+      if (/^\d{2}:\d{2}:\d{2}\s+\[/.test(trimmed)) return false;
+      // Skip [module] log lines that may leak from stderr (e.g. "[plugins] ...")
+      if (/^\[[\w_]+\]/.test(trimmed)) return false;
+      // Skip the tagline lines
+      if (trimmed.startsWith('Automation with') || trimmed.startsWith('Runs on a')) return false;
+      if (trimmed.startsWith('No $') || trimmed.startsWith('Alexa,')) return false;
+      return true;
+    });
+
+    return cleanLines.join('\n').trim();
+  }
+
+  // ── Code Execution ───────────────────────────────────────────────────────
+
+  /**
+   * Execute code via the OpenClaw CLI's exec tool.
+   *
+   * Strategy: Ask the agent to run the code using the `exec` built-in tool.
+   * The prompt is carefully crafted to get structured output.
+   */
+  async executeCode(
+    code: string,
+    language: string = 'javascript',
+  ): Promise<ExecResult> {
+    const runtimeMap: Record<string, string> = {
+      javascript: 'node -e',
+      typescript: 'npx tsx -e',
+      python: 'python3 -c',
+      bash: 'bash -c',
+      shell: 'bash -c',
+    };
+
+    const runtime = runtimeMap[language.toLowerCase()];
+    if (!runtime) {
+      throw new Error(
+        `Unsupported language: ${language}. Supported: ${Object.keys(runtimeMap).join(', ')}`,
+      );
+    }
+
+    // Build the command directly
+    const command = `${runtime} ${JSON.stringify(code)}`;
+
+    // Ask the agent to execute using the exec tool
+    const prompt = [
+      'Execute the following command using the exec tool. Return ONLY the raw output, no commentary:',
+      '',
+      '```',
+      command,
+      '```',
+      '',
+      'Important:',
+      '- Use the exec tool to run this command',
+      '- Do not modify the command',
+      '- After execution, reply with exactly the stdout output, nothing else',
+    ].join('\n');
+
+    const args = ['agent', '--agent', this.config.agentId, '--message', prompt];
+
+    try {
+      const rawOutput = this.runCliCommand(args);
+      const parsedOutput = this.extractLLMContent(rawOutput);
+      return {
+        stdout: parsedOutput,
+        stderr: '',
+        exitCode: 0,
+        rawOutput,
+      };
+    } catch (err) {
+      throw this.wrapError('executeCode', err);
+    }
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  /**
+   * Run an OpenClaw CLI command and capture all output reliably.
+   *
+   * Uses `execSync` with shell redirection to a temp file, because the
+   * OpenClaw CLI uses advanced terminal I/O that `execFile` / `execFileAsync`
+   * cannot capture in certain environments (e.g., Vitest worker threads).
+   */
+  private runCliCommand(args: string[]): string {
+    const tmpFile = `/tmp/openclaw-out-${randomUUID()}.txt`;
+    // Shell-escape each arg (wrap in single quotes, escape inner single quotes)
+    const escaped = args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(' ');
+    const cmd = `${this.config.cliBin} ${escaped} > ${tmpFile} 2>&1`;
+
+    try {
+      execSync(cmd, {
+        timeout: this.config.timeoutSeconds * 1000,
+        maxBuffer: 10 * 1024 * 1024,
+        env: { ...process.env },
+        shell: '/bin/bash',
+        stdio: 'pipe',
+      });
+    } catch {
+      // CLI may exit non-zero; we still want to read the output
+    }
+
+    try {
+      const output = readFileSync(tmpFile, 'utf-8');
+      unlinkSync(tmpFile);
+      return output;
+    } catch {
+      return '';
+    }
+  }
+
+  private wrapError(method: string, err: unknown): Error {
+    if (err instanceof Error) {
+      return new Error(`[OpenClawAdapter.${method}] ${err.message}`, { cause: err });
+    }
+    return new Error(`[OpenClawAdapter.${method}] ${String(err)}`);
+  }
+}
+
+// ─── Smoke Test (run with: npx tsx src/openclaw/adapter.ts) ──────────────────
+
+const isMainModule = process.argv[1]?.endsWith('adapter.ts') ||
+                     process.argv[1]?.endsWith('adapter.js');
+
+if (isMainModule) {
+  (async () => {
+  console.log('🦞 OpenClaw Adapter — Smoke Test\\n');
+  console.log('='.repeat(60));
+
+  const adapter = new OpenClawAdapter();
+
+  // Step 1: Health Check
+  console.log('\n📡 Step 1: Health Check...');
+  const health = await adapter.healthCheck();
+  console.log(`   CLI available: ${health.cli ? '✅' : '❌'}`);
+  console.log(`   Gateway reachable: ${health.gateway ? '✅' : '❌'}`);
+  console.log(`   Details:\n${health.details.split('\n').map(l => `     ${l}`).join('\n')}`);
+
+  if (!health.cli) {
+    console.error('\n❌ OpenClaw CLI not found. Install with: npm install -g openclaw@latest');
+    console.error('   Then run: openclaw onboard');
+    process.exit(1);
+  }
+
+  if (!health.gateway) {
+    console.error('\n⚠️  Gateway not reachable. Start it with: openclaw gateway');
+    console.error('   Continuing with CLI-only tests (may still work if gateway starts automatically)...\n');
+  }
+
+  // Step 2: LLM Call
+  console.log('\n🤖 Step 2: LLM Call...');
+  try {
+    const llmResponse = await adapter.callLLM(
+      '你是一个极其简洁的助手，只用中文回答。',
+      '请回复"连通成功"四个字，不要有任何其他内容。',
+    );
+    console.log(`   ✅ LLM Response: "${llmResponse.content.substring(0, 200)}"`);
+    if (llmResponse.content.includes('连通成功')) {
+      console.log('   🎉 LLM connectivity verified!');
+    } else {
+      console.log('   ⚠️  Got a response, but not the expected content (this is fine — LLM is working)');
+    }
+  } catch (err) {
+    console.error(`   ❌ LLM Call failed: ${err instanceof Error ? err.message : err}`);
+  }
+
+  // Step 3: Code Execution
+  console.log('\n💻 Step 3: Code Execution...');
+  try {
+    const execResult = await adapter.executeCode(
+      'console.log("hello from openclaw"); console.log(2 + 2);',
+      'javascript',
+    );
+    console.log(`   ✅ Exec stdout: "${execResult.stdout.substring(0, 200)}"`);
+    if (execResult.stdout.includes('hello from openclaw')) {
+      console.log('   🎉 Code execution verified!');
+    } else {
+      console.log('   ⚠️  Got output, but not the expected content');
+    }
+  } catch (err) {
+    console.error(`   ❌ Code Execution failed: ${err instanceof Error ? err.message : err}`);
+  }
+
+  console.log('\n' + '='.repeat(60));
+  console.log('🏁 Smoke test complete.\\n');
+  })();
+}

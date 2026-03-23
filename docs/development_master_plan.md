@@ -1,5 +1,7 @@
 # OpenClaw Republic — 开发总体规划 (Development Master Plan)
 
+> ⚠️ **本文档已归档（Phase 0~3 已完成）。** 后端已决定从 Python 迁移至 TypeScript + OpenClaw Skill 引擎。后续开发请参照 👉 [TypeScript 重构开发总体规划](./development_master_plan_ts.md)。
+
 > 基于 [PRD v3](file:///d:/Projects/Privates/openclaw_trias/docs/prds/PRD_v3.md) 拆分的多阶段开发路线图。
 > 每个 Phase 在后续会话中逐步细化并实施。
 > 项目代号：**OpenClaw-Republic / DangZongTong (当总统)**
@@ -97,7 +99,7 @@ openclaw_trias/                         # Git 仓库根目录
 
 ---
 
-## Phase 1 · 后端核心：三权 Agent 状态机
+## Phase 1 · 后端核心：三权 Agent 状态机 ✅ 已完成
 
 **目标**：实现三个 Branch 的 Agent Persona、RBAC 权限隔离、状态流转和协作协议。**这是整个系统的心脏。**
 
@@ -167,6 +169,17 @@ openclaw_trias/                         # Git 仓库根目录
 | 2.6 | **REST 查询 API** | 查询历史任务、法案内容、辩论记录（含 Conflict Score 曲线）、审判结果 |
 
 **产出**：`curl` / Postman 可发 Petition；`wscat` 可收到实时 PRD §4 格式的事件 JSON 流。
+
+### Phase 2 Task 拆分
+
+| Task | 标题 | 预估 | 状态 |
+|------|------|------|------|
+| Task 2-A | FastAPI 应用骨架 & 核心 Petition API | 1 会话 | ⬜ 未开始 |
+| Task 2-B | WebSocket 实时事件流 | 1 会话 | ⬜ 未开始 |
+| Task 2-C | PRD §4 完整事件映射 & Pipeline 埋点 | 1-2 会话 | ⬜ 未开始 |
+| Task 2-D | REST 查询 API & 并发控制 | 1 会话 | ⬜ 未开始 |
+
+详细拆分见：[Phase 2 Overview](docs/plan/phase2/phase2_overview.md)
 
 ---
 
@@ -280,4 +293,4 @@ graph LR
 | Phase 4 | ⭐⭐⭐ 中高 | 🟢 后续 | Phase 1-3 基本就绪后串通 |
 | Phase 5 | ⭐ 低 | 🟢 收尾 | 最后的发布打磨 |
 
-> **建议下一步**：从 **Phase 0（项目脚手架 & SOUL.md 人设配置）** 开始，搭建项目骨架、编写宪法配置和所有角色的 SOUL.md。
+> **建议下一步**：从 **Phase 2（通信桥接层 — API & WebSocket）** 开始，将后端 Agent 的运行时状态暴露为 API 和实时流供前端消费。

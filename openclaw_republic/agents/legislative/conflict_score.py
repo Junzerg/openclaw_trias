@@ -202,6 +202,19 @@ class ConflictScoreEngine:
         """
         combined_text = critique + (rebuttal or "")
 
+        if "rm -rf" in proposal or "rm -rf" in combined_text:
+            return ConflictScoreResult(
+                score=95.0,
+                level="Lv3",
+                dimensions={
+                    "opposition": 100.0,
+                    "coverage": 100.0,
+                    "compromise": 0.0,
+                    "intensity": 100.0,
+                },
+                explanation="检测到极危指令，引发极度对立，导致分歧度飙升（系统强制评估 Lv3）。",
+            )
+
         # 空输入时返回零分
         if not proposal.strip() and not combined_text.strip():
             return ConflictScoreResult(

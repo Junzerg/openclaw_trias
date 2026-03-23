@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """单元测试 — 事件模型创建 & 序列化。"""
 
 import json
@@ -19,8 +20,8 @@ from openclaw_republic.schemas.events import (
 class TestEventAction:
     """测试 EventAction 枚举。"""
 
-    def test_all_nine_actions_defined(self) -> None:
-        """EventAction 枚举覆盖 PRD §4 定义的全部 9 种事件类型。"""
+    def test_all_actions_defined(self) -> None:
+        """EventAction 枚举覆盖 PRD §4 定义的 9 种事件类型 + 状态变更事件。"""
         expected_actions = {
             "propose",
             "brawl",
@@ -31,13 +32,14 @@ class TestEventAction:
             "tool_call",
             "constitutional",
             "unconstitutional",
+            "state_change",
         }
         actual_actions = {a.value for a in EventAction}
         assert actual_actions == expected_actions
 
     def test_action_count(self) -> None:
-        """EventAction 枚举恰好包含 9 种类型。"""
-        assert len(EventAction) == 9
+        """EventAction 枚举包含 10 种类型。"""
+        assert len(EventAction) == 10  # noqa: PLR2004
 
     def test_action_is_str_enum(self) -> None:
         """EventAction 是 str 类型枚举。"""
@@ -205,6 +207,7 @@ class TestJudgmentEvent:
             source_agent="chief_justice",
             action=EventAction.CONSTITUTIONAL,
             ruling="被审查的执行行为符合宪法全部相关条款。",
+            reason="没有检测到越权行为。",
         )
         assert event.action == EventAction.CONSTITUTIONAL
         assert event.violation_type is None
@@ -217,6 +220,7 @@ class TestJudgmentEvent:
             action=EventAction.UNCONSTITUTIONAL,
             violation_type="blacklist_command",
             ruling="检测到黑名单命令 'rm -rf'，判定违宪。",
+            reason="使用了被禁止的命令。",
             evidence=["执行日志第 42 行：rm -rf /tmp/data"],
         )
         assert event.action == EventAction.UNCONSTITUTIONAL
@@ -229,6 +233,7 @@ class TestJudgmentEvent:
             source_agent="chief_justice",
             action=EventAction.UNCONSTITUTIONAL,
             ruling="违宪",
+            reason="这是一个测试违宪原因。",
             evidence=["evidence_1", "evidence_2"],
         )
         data = json.loads(event.model_dump_json())

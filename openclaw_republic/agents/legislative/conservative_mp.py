@@ -76,16 +76,18 @@ class ConservativeMP(BaseAgent):
         self.require_permission(Permission.PLAN)
         prompt = f"作为保守派议员，请对以下提案投票（赞成/反对）：\n\n{proposal}"
         result = await self._call_llm(prompt)
-        return "赞成" in result or "yes" in result.lower()
+        result_lower = result.lower()
+        if "反对" in result or "no" in result_lower or "nay" in result_lower:
+            return False
+        return "赞成" in result or "yes" in result_lower
 
     async def _call_llm(self, prompt: str) -> str:
-        """调用 LLM 生成回复（占位实现，后续替换为真实 LLM 调用）。
+        """调用 LLM 生成回复（演示版占位）。"""
+        import asyncio
 
-        Args:
-            prompt: 发送给 LLM 的完整提示词。
-
-        Returns:
-            LLM 的回复文本。
-        """
-        _ = prompt
-        return ""
+        await asyncio.sleep(0.5)
+        if "rm -rf" in prompt:
+            return "这纯粹是数字恐怖主义！运行 rm -rf / 会摧毁整个生产数据库！坚决反对！"
+        if "赞成/反对" in prompt:
+            return "虽然激进，但姑且赞成。"
+        return "这种步子迈太大的提案充满了不确定性，我们需要更多安全审计！"

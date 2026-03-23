@@ -84,3 +84,60 @@ class Act(BaseModel):
         default_factory=lambda: datetime.now(tz=timezone.utc),
         description="创建时间",
     )
+
+
+# ---------------------------------------------------------------------------
+# 行政分支模型 — 总统审查 / 否决 / 任务派发 / 执行报告
+# ---------------------------------------------------------------------------
+
+#: 签署或否决。
+SignOrVeto = Literal["sign", "veto"]
+
+
+class VetoNotice(BaseModel):
+    """否决通知 — 总统打回法案的理由。"""
+
+    act_id: str = Field(description="被否决的法案 ID")
+    reason: str = Field(description="否决总述")
+    specific_issues: list[str] = Field(
+        min_length=1,
+        description="具体问题列表",
+    )
+    suggestion: str | None = Field(
+        default=None,
+        description="修改建议",
+    )
+
+
+class ExecutionTask(BaseModel):
+    """总统拆解后分派给内阁的单个任务。"""
+
+    task_id: str = Field(description="任务唯一 ID")
+    act_id: str = Field(description="所属法案 ID")
+    step: ActStep = Field(description="对应的法案步骤")
+    assigned_to: str = Field(description="被分派的部长角色名")
+
+
+class TaskResult(BaseModel):
+    """单个步骤的执行结果。"""
+
+    task_id: str = Field(description="任务 ID")
+    step_index: int = Field(ge=0, description="步骤编号")
+    status: Literal["success", "failed", "skipped"] = Field(
+        description="执行状态",
+    )
+    output: str = Field(default="", description="执行输出")
+    tokens_consumed: int = Field(default=0, ge=0, description="消耗 Token 数")
+    error: str | None = Field(default=None, description="错误信息")
+
+
+class ExecutionReport(BaseModel):
+    """法案执行报告 — 汇总所有步骤执行结果。"""
+
+    act_id: str = Field(description="法案 ID")
+    overall_status: Literal["completed", "partial", "failed"] = Field(
+        description="整体执行状态",
+    )
+    task_results: list[TaskResult] = Field(description="各步骤执行结果")
+    total_tokens_consumed: int = Field(ge=0, description="总 Token 消耗")
+    execution_time_seconds: float = Field(ge=0.0, description="总执行时间（秒）")

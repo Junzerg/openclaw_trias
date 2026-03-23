@@ -19,6 +19,7 @@ class EventAction(str, Enum):
     TOOL_CALL = "tool_call"  # 工具调用
     CONSTITUTIONAL = "constitutional"  # 合宪判决
     UNCONSTITUTIONAL = "unconstitutional"  # 违宪判决
+    STATE_CHANGE = "state_change"  # 法案生命周期状态变更
 
 
 class EmotionType(str, Enum):
@@ -63,6 +64,13 @@ class VoteEvent(BaseEvent):
     result: str = Field(description="passed 或 rejected")
 
 
+class VetoEvent(BaseEvent):
+    """总统否决事件。"""
+
+    action: EventAction = EventAction.VETO
+    reason: str = Field(description="否决原因")
+
+
 class ExecutionEvent(BaseEvent):
     """行政执行事件。"""
 
@@ -76,4 +84,6 @@ class JudgmentEvent(BaseEvent):
 
     violation_type: str | None = Field(default=None, description="违宪类型")
     ruling: str = Field(description="判决摘要")
+    reason: str = Field(description="原因说明")
+    traceback: str | None = Field(default=None, description="执行追溯/上下文")
     evidence: list[str] = Field(default_factory=list, description="证据列表")

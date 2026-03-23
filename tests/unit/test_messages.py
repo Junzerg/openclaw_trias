@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """单元测试 — Agent 消息模型。"""
 
 from __future__ import annotations

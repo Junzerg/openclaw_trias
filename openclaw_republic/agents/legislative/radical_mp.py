@@ -76,17 +76,19 @@ class RadicalMP(BaseAgent):
         self.require_permission(Permission.PLAN)
         prompt = f"作为激进派议员，请对以下提案投票（赞成/反对）：\n\n{proposal}"
         result = await self._call_llm(prompt)
-        # 简单判定：包含"赞成"则赞成，否则反对
-        return "赞成" in result or "yes" in result.lower()
+        # 简单判定：优先检查反对，否则检查赞成
+        result_lower = result.lower()
+        if "反对" in result or "no" in result_lower or "nay" in result_lower:
+            return False
+        return "赞成" in result or "yes" in result_lower
 
     async def _call_llm(self, prompt: str) -> str:
-        """调用 LLM 生成回复（占位实现，后续替换为真实 LLM 调用）。
+        """调用 LLM 生成回复（演示版占位）。"""
+        import asyncio
 
-        Args:
-            prompt: 发送给 LLM 的完整提示词。
-
-        Returns:
-            LLM 的回复文本。
-        """
-        _ = prompt
-        return ""
+        await asyncio.sleep(0.5)
+        if "rm -rf" in prompt:
+            return "为了重构，我们必须执行 rm -rf / 清理一切技术债！不破不立！"
+        if "赞成/反对" in prompt:
+            return "我坚决赞成这个提案！"
+        return "我们需要引入最前沿的 AI 代理技术来彻底颠覆现有的官僚流程！"

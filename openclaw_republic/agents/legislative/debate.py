@@ -8,10 +8,11 @@ Conflict Score 由 ConflictScoreEngine 计算，基于规则引擎实现。
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
+from openclaw_republic.schemas.events import EventAction
 from openclaw_republic.agents.legislative.conflict_score import (
     ConflictScoreEngine,
     ConflictTrend,
@@ -119,6 +120,7 @@ class DebateEngine:
         radical: RadicalMP,
         conservative: ConservativeMP,
         petition: str,
+        event_publisher: Any | None = None,
     ) -> DebateResult:
         """执行完整辩论流程。
 
@@ -143,12 +145,34 @@ class DebateEngine:
         rounds: list[DebateRound] = []
         score_history: list[float] = []
         current_proposal = await radical.propose(petition)
+
+        if event_publisher:
+            await event_publisher(
+                EventAction.PROPOSE,
+                agent="radical_mp",
+                text=current_proposal,
+                round_number=1,
+                conflict_score=0.0,
+            )
+
         last_rebuttal = ""  # 首轮无 rebuttal
         final_score = 0.0
 
         for round_num in range(1, self._config.max_rounds + 1):
-            # 保守派 critique
-            critique_text = await conservative.critique(current_proposal)
+            # 保守派 critique (首轮) 或 rebut (后续轮次)
+            if round_num == 1:
+                critique_text = await conservative.critique(current_proposal)
+            else:
+                critique_text = await conservative.rebut(current_proposal)
+
+            if event_publisher:
+                await event_publisher(
+                    EventAction.PROPOSE,
+                    agent="conservative_mp",
+                    text=critique_text,
+                    round_number=round_num,
+                    conflict_score=final_score,
+                )
 
             # 使用 ConflictScoreEngine 计算分歧度
             # 注意：当前轮次的 rebuttal 尚未生成，仅基于 proposal + critique 评分
@@ -162,11 +186,31 @@ class DebateEngine:
             # 议长控场：分歧度超过控场阈值时介入
             intervention: str | None = None
             if score > self._config.conflict_threshold:
+                if event_publisher:
+                    await event_publisher(EventAction.BRAWL, intensity=min(1.0, score / 100.0))
+
                 intervention = await speaker.intervene(
                     current_proposal,
                     critique_text,
                     score,
                 )
+
+                if event_publisher:
+                    await event_publisher(EventAction.ORDER, intensity=min(1.0, score / 100.0))
+
+                # 极端分歧下直接终止后续轮次，触发强行表决
+                if score >= 90.0:
+                    debate_round = DebateRound(
+                        round_number=round_num,
+                        proposal=current_proposal,
+                        critique=critique_text,
+                        rebuttal=last_rebuttal,
+                        conflict_score=score,
+                        speaker_intervention=intervention,
+                    )
+                    rounds.append(debate_round)
+                    final_score = score
+                    break
 
             debate_round = DebateRound(
                 round_number=round_num,
@@ -187,6 +231,14 @@ class DebateEngine:
             # 如果还有轮次，激进派反驳
             if round_num < self._config.max_rounds:
                 last_rebuttal = await radical.rebut(critique_text)
+                if event_publisher:
+                    await event_publisher(
+                        EventAction.PROPOSE,
+                        agent="radical_mp",
+                        text=last_rebuttal,
+                        round_number=round_num,
+                        conflict_score=score,
+                    )
                 current_proposal = last_rebuttal
 
         # 计算趋势（至少 2 轮）

@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from threading import Lock
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from .models import ConstitutionConfig
 

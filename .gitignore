@@ -31,6 +31,18 @@ htmlcov/
 # Docker
 docker-compose.override.yml
 
+# Runtime data
+data/*.db
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Backend (TypeScript)
+backend/node_modules/
+backend/dist/
+
 # OS
 .DS_Store
 Thumbs.db

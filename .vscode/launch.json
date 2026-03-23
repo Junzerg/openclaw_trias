@@ -1,0 +1,49 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Backend: Debug Server",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run_server.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "justMyCode": true
+        },
+        {
+            "name": "Frontend: Debug Web",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:3000",
+            "webRoot": "${workspaceFolder}/frontend",
+            "preLaunchTask": "Frontend: Dev",
+            "sourceMapPathOverrides": {
+                "webpack:///src/*": "${webRoot}/src/*",
+                "vite:///src/*": "${webRoot}/src/*"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "Frontend",
+                "order": 2
+            }
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Full-stack: Debug App",
+            "configurations": [
+                "Backend: Debug Server",
+                "Frontend: Debug Web"
+            ],
+            "stopAll": true,
+            "presentation": {
+                "hidden": false,
+                "group": "Stack",
+                "order": 1
+            }
+        }
+    ]
+}

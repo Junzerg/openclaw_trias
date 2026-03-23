@@ -68,6 +68,7 @@ class Speaker(BaseAgent):
         radical: RadicalMP,
         conservative: ConservativeMP,
         config: DebateConfig,
+        event_publisher: Any | None = None,
     ) -> DebateResult:
         """控场：管理辩论轮次、判定终止条件。
 
@@ -105,6 +106,7 @@ class Speaker(BaseAgent):
             radical=radical,
             conservative=conservative,
             petition=self._current_petition,
+            event_publisher=event_publisher,
         )
 
     async def call_vote(

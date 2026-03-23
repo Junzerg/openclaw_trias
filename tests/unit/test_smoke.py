@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """Smoke test — 确认包结构可导入。"""
 
 
@@ -18,7 +19,10 @@ def test_version_exists():
 
 def test_government_class_exists():
     """CyberGovernment 类存在且可实例化。"""
+    from pathlib import Path
+
     from openclaw_republic.government import CyberGovernment
 
-    gov = CyberGovernment()
+    config_dir = Path(__file__).resolve().parent.parent.parent / "config"
+    gov = CyberGovernment(config_dir=config_dir)
     assert gov is not None

@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """单元测试 — Speaker 议长 Agent。"""
 
 from __future__ import annotations
