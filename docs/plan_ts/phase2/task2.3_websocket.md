@@ -79,7 +79,41 @@ interface WSEventPayload {
 
 ## 验收维度
 
-- [ ] `ws-manager.test.ts`：验证 `connect` / `disconnect` / `broadcast` 行为，包括死连接自动清理
-- [ ] `websocket.test.ts`：验证 `ping` 响应、`new_task` 指令解析、`debug_*` 指令转发
-- [ ] 手动 `wscat -c ws://localhost:8000/ws/task/test-123` 可成功建立连接
-- [ ] 发送 `ping` 字符串 → 收到 `{ type: "pong" }` 响应
+- [x] `ws-manager.test.ts`：验证 `connect` / `disconnect` / `broadcast` 行为，包括死连接自动清理 — **21 个单测全绿**
+- [x] `websocket.test.ts`：验证 `ping` 响应、`new_task` 指令解析、`debug_*` 指令转发 — **23 个端到端测试全绿**
+- [x] 手动 `wscat -c ws://localhost:8000/ws/task/test-123` 可成功建立连接
+- [x] 发送 `ping` 字符串 → 收到 `{ type: "pong" }` 响应
+
+## 完成状态
+
+> ✅ **已完成** — 2026-03-23，经过 10 轮极限安全审查
+
+### 测试报告
+
+```
+ ✓ tests/server/ws-manager.test.ts  (21 tests)    7ms
+ ✓ tests/server/websocket.test.ts   (23 tests) 2473ms
+
+ Test Files  5 passed (5)
+      Tests  110 passed (110)
+ TypeCheck   0 errors
+```
+
+### 安全加固清单 (11 层防御矩阵)
+
+| # | 防御层 | 文件 | 风险等级 |
+|---|--------|------|----------|
+| 1 | 顶层 async try-catch 防 unhandled rejection | websocket.ts | Fatal |
+| 2 | JSON 解析防御 (非JSON/数组/null/空串/二进制) | websocket.ts | High |
+| 3 | Query string 剥离防 taskId 污染 | app.ts | High |
+| 4 | maxPayload 64KB 防 CPU DoS (JSON.parse 阻塞) | app.ts | Critical |
+| 5 | RFC 6455 Ping/Pong 心跳防半开连接 FD 耗尽 | websocket.ts | Critical |
+| 6 | 零 Timer 时间戳限流 50帧/秒 防消息洪峰 | websocket.ts | Critical |
+| 7 | TCP Socket error 监听防握手期 ECONNRESET 崩溃 | app.ts | Fatal |
+| 8 | 单任务 100 连接惊群限流防 Broadcast OOM | ws-manager.ts | Critical |
+| 9 | Fire-and-Forget 广播 + bufferedAmount 慢读取者强杀 | ws-manager.ts | Fatal |
+| 10 | Payload 注入防线 (Object.assign 顺序反转) | websocket.ts | High |
+| 11 | PetitionRequestSchema 复用防验证绕过 | websocket.ts | High |
+| 12 | decodeURIComponent 防跨协议状态脱节 | app.ts | High |
+| 13 | console %j 格式化防终端日志注入 (CWE-117) | websocket.ts, ws-manager.ts | Medium |
+
