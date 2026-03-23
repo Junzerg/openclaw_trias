@@ -40,7 +40,8 @@ function countKeywords(text: string, keywords: string[]): number {
   let count = 0;
 
   for (const kw of keywords) {
-    if (/^[\u0000-\u007F]*$/.test(kw)) {
+    // eslint-disable-next-line no-control-regex
+    if (/^[\x00-\x7F]*$/.test(kw)) {
       // English: match whole words boundary
       const regex = new RegExp(`\\b${kw.replace(/[-\\/\\\\^$*+?.()|[\\]{}]/g, '\\$&')}\\b`, 'g');
       const matches = lowerText.match(regex);

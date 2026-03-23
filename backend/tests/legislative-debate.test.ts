@@ -106,8 +106,8 @@ describe('Legislative Debate Engine and Speaker', () => {
     expect(result.consensus_reached).toBe(false);
     expect(result.rounds[0].speaker_intervention).toBe('ORDER! ORDER! 理性讨论！');
     expect(mockAdapter.callLLM).toHaveBeenCalledTimes(3); // propose, critique, intervene
-    expect(speakerSpy).toHaveBeenCalledWith('brawl', expect.any(Object));
-    expect(speakerSpy).toHaveBeenCalledWith('order', expect.any(Object));
+    expect(speakerSpy).toHaveBeenCalledWith('brawl', expect.objectContaining({ intensity: 0.95 }), undefined, undefined);
+    expect(speakerSpy).toHaveBeenCalledWith('order', expect.objectContaining({ intensity: 0.95, statement: 'ORDER! ORDER! 理性讨论！' }), undefined, undefined);
   });
 
   it('Case 3: VotingMachine should tally correctly', async () => {

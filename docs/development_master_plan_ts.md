@@ -420,12 +420,12 @@ abstract class BaseAgent {
 | ✅ 完成 | `agents/judicial/result_reviewer.py` | 40 | `judicial/result-reviewer.ts` | ⭐ 低 | |
 | ✅ 完成 | `agents/judicial/kill_switch.py` | 65 | `judicial/kill-switch.ts` | ⭐⭐ 低 | |
 | ✅ 完成 | `government.py` | 429 | `government.ts` | ⭐⭐⭐⭐⭐ 最高 | 主编排器 |
-| 🟢 P7 | `server/app.py` | 130 | `server/app.ts` | ⭐⭐ 低 | FastAPI→Fastify |
-| 🟢 P7 | `server/routes.py` | 170 | `server/routes.ts` | ⭐⭐ 中低 | |
-| 🟢 P7 | `server/websocket.py` | 90 | `server/websocket.ts` | ⭐⭐ 中低 | |
-| 🟢 P7 | `server/ws_manager.py` | 75 | `server/ws-manager.ts` | ⭐⭐ 低 | |
-| 🟢 P7 | `server/task_queue.py` | 65 | `server/task-queue.ts` | ⭐⭐ 低 | |
-| 🟢 P7 | `server/task_store.py` | 260 | `server/task-store.ts` | ⭐⭐⭐ 中 | SQLite 持久化 |
+| ✅ 完成 | `server/app.py` | 130 | `server/app.ts` | ⭐⭐ 低 | Express 应用骨架 (Task 2.1) |
+| ✅ 完成 | `server/routes.py` | 170 | `server/routes.ts` | ⭐⭐⭐⭐ 高 | REST API + 8 轮 QA 修复 18 处隐患，34 防弹单测 (Task 2.1) |
+| ✅ 完成 | `server/websocket.py` | 90 | `server/websocket.ts` | ⭐⭐⭐ 中 | 10 轮安全 QA，11 层防御加固，23 个端到端测试 (Task 2.3) |
+| ✅ 完成 | `server/ws_manager.py` | 75 | `server/ws-manager.ts` | ⭐⭐ 低 | Fire-and-Forget 广播 + 慢读取者保护 + 惊群限流，21 个单测 (Task 2.3) |
+| ✅ 完成 | `server/task_queue.py` | 65 | `server/task-queue.ts` | ⭐⭐ 低 | 手写 semaphore 队列 (Task 2.2) |
+| ✅ 完成 | `server/task_store.py` | 260 | `server/task-store.ts` | ⭐⭐⭐ 中 | better-sqlite3 持久化 (Task 2.2) |
 
 **合计**：约 **4,000 行** Python 需翻译为 TypeScript（扣除空行/注释后有效逻辑约 2,500 行）。
 
