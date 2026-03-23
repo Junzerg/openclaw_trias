@@ -13,6 +13,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'node:crypto';
 import { AppState } from './app';
+import { runPetition } from './pipeline-bridge';
 import {
   PetitionRequestSchema,
   type PetitionResponse,
@@ -58,12 +59,10 @@ export function createRouter(): Router {
       // 存储任务到持久层
       await state.taskStore.createTask(taskId, prompt);
 
-      // 后台运行 Pipeline（Task 2.4 将桥接真实逻辑，当前占位）
-      const pipelineTaskFactory = async () => {
-        // Stub: 真实的 _run_petition 逻辑由 Task 2.4 实现
-        // 这里不做任何事情，保持 pending 状态
-      };
-      await state.taskQueue.submit(taskId, pipelineTaskFactory);
+      // 后台运行 Pipeline — 通过 TaskQueue 调度，runPetition 内部维护状态机
+      await state.taskQueue.submit(taskId, async () => {
+        await runPetition(taskId, prompt, state);
+      });
 
       const body: PetitionResponse = {
         task_id: taskId,

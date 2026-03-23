@@ -95,10 +95,10 @@ export function createApp(state: AppState): Express {
 
   // CORS — 严格对齐 Python 版，允许所有方法和头，防止前端 Preflight 失败
   // 使用显式 Methods 列表而不用 '*' 是为了兼容严格的老型浏览器（如 Safari 等部分版本禁用了 '*' 作为 method 通配符）
-  app.use(cors({ 
-    origin: '*', 
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], 
-    allowedHeaders: '*' 
+  app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: '*'
   }));
 
   // JSON body parser — 限制 1MB 防止 DoS
@@ -122,10 +122,10 @@ export function createApp(state: AppState): Express {
     if (status === 500) {
       console.error('Unhandled route error:', err);
     }
-    
-    res.status(status).json({ 
-      error: status === 500 ? 'Internal Server Error' : 'Bad Request', 
-      detail: err.message 
+
+    res.status(status).json({
+      error: status === 500 ? 'Internal Server Error' : 'Bad Request',
+      detail: err.message
     });
   });
 
@@ -162,7 +162,7 @@ export function startServer(app: Express, port: number = 8000) {
  */
 export function startServerWithWebSocket(
   app: Express,
-  wsManager: ConnectionManager,
+  wsManager: IConnectionManager,
   appState: AppState,
   port: number = 8000,
 ): Server {
@@ -170,9 +170,9 @@ export function startServerWithWebSocket(
 
   // noServer 模式 — 手动控制 WS 升级
   // 防雷 4: 限制 maxPayload 为 64KB（1MB对WS单帧过大，防 JSON.parse 阻塞 Event Loop）
-  const wss = new WebSocketServer({ 
+  const wss = new WebSocketServer({
     noServer: true,
-    maxPayload: 64 * 1024 
+    maxPayload: 64 * 1024
   });
 
   // 关键：在 listen() 之前注册 upgrade handler
@@ -186,7 +186,7 @@ export function startServerWithWebSocket(
     // 防止 taskId 被 ?token=xxx 等查询参数污染
     const pathname = request.url?.split('?')[0] ?? '';
     const match = pathname.match(/^\/ws\/task\/(.+)$/);
-    
+
     if (match) {
       // 防雷 11: 跨协议状态脱节 (Cross-Protocol Desync) & URI 异常攻击
       // HTTP 框架会自动 decode URI，但裸 WebSocket 升级事件接收到的是未经 decode 的 raw URL。

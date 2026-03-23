@@ -8,9 +8,9 @@
  */
 
 import type { WebSocket } from 'ws';
-import type { ConnectionManager } from './ws-manager';
-import type { AppState } from './app';
+import type { AppState, IConnectionManager } from './app';
 import { PetitionRequestSchema } from './schemas'; // 引入 Schema 用于防绕过验证
+import { runPetition } from './pipeline-bridge';
 
 /**
  * 处理一个已建立的 WebSocket 连接。
@@ -20,7 +20,7 @@ import { PetitionRequestSchema } from './schemas'; // 引入 Schema 用于防绕
 export function handleWebSocketConnection(
   ws: WebSocket,
   taskId: string,
-  manager: ConnectionManager,
+  manager: IConnectionManager,
   appState: AppState,
 ): void {
   // 注册连接到管理器
@@ -28,7 +28,7 @@ export function handleWebSocketConnection(
 
   // ─── 防雷 5：标准心跳检测（Ping/Pong）防半开连接 FD 死锁 ────────
   let isAlive = true;
-  
+
   // RFC 6455: 浏览器底层会自动回复 Pong 帧，无需前端写 JS 代码
   ws.on('pong', () => {
     isAlive = true;
@@ -43,7 +43,7 @@ export function handleWebSocketConnection(
       ws.terminate(); // 长时间未收到底层 pong 响应，强行掐断释放 FD
       return;
     }
-    
+
     isAlive = false;
     ws.ping(); // 发送底层 Ping 控制帧
   }, 30000);
@@ -119,17 +119,17 @@ export function handleWebSocketConnection(
         const prompt = parsedData.data.prompt;
 
         try {
-          // 清理旧数据并重新创建任务
-          // 注意：Task 2.4 的 Pipeline 桥接会完善此处逻辑
+          // 创建任务记录
           await appState.taskStore.createTask(taskId, prompt);
         } catch {
-          // 如果 task_id 已存在(UNIQUE 冲突)，忽略 — 
-          // 后续 Task 2.4 会实现完整的清理+重建逻辑
+          // task_id 已存在(UNIQUE 冲突)，忽略
           console.warn('[WS] new_task: create failed (task=%j), may already exist', taskId);
         }
 
-        // TODO: Task 2.4 将实现与 Pipeline 桥接的 _run_petition 调用
-        // 目前先将状态更新为 running 以表示收到了指令
+        // 提交 Pipeline 到队列执行
+        await appState.taskQueue.submit(taskId, async () => {
+          await runPetition(taskId, prompt, appState);
+        });
         return;
       }
 
@@ -137,7 +137,7 @@ export function handleWebSocketConnection(
       if (action.startsWith('debug_')) {
         // 将 debug_brawl → brawl, debug_vote → vote, etc.
         const realAction = action.replace('debug_', '');
-        
+
         // 防雷 10: (Payload 注入防线 / 属性覆盖保护)
         // 必须让系统生成的 action 和 task_id 拥有最高优先级，强制覆盖写入。
         // 如果让客户端数据 (debugData) 挂在后面，攻击者可以发送
