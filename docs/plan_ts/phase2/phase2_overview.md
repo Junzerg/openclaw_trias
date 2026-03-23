@@ -41,7 +41,7 @@ Phase 2 的核心任务是 **将 Python 版的 FastAPI Server 层 1:1 翻译为 
 | ✅ **[2.1 HTTP 服务骨架与路由](task2.1_http_server.md)** | `server/app.ts`, `server/routes.ts`, `server/schemas.ts` | ~500 行 | Express 应用搭建 + REST API + Zod 校验，经 8 轮 QA 修复 18 处隐患（含 5 个致命级），34 个防弹单测 |
 | ✅ **[2.2 任务持久化与队列](task2.2_task_store.md)** | `server/task-store.ts`, `server/task-queue.ts` | ~370 行 | better-sqlite3 + 手写 semaphore 队列，32 个单测 |
 | **[2.3 WebSocket 连接管理与事件推送](task2.3_websocket.md)** | `server/ws-manager.ts`, `server/websocket.ts` | ~200 行 | WS 连接管理器 + 端点实现，需要桥接 `MessageBus` → WS broadcast |
-| **[2.4 Pipeline 桥接与事件流集成](task2.4_pipeline_bridge.md)** | 修改 `server/app.ts`（lifespan 逻辑）、事件桥接 | ~200 行 | 将 `CyberGovernment.bus` 订阅的事件桥接到 WS 和 DB 持久化，实现完整的事件流转链路 |
+| ✅ **[2.4 Pipeline 桥接与事件流集成](task2.4_pipeline_bridge.md)** | 修改 `server/app.ts`（lifespan 逻辑）、事件桥接 | ~200 行 | 将 `CyberGovernment.bus` 订阅的事件桥接到 WS 和 DB 持久化，实现完整的事件流转链路 |
 | **[2.5 端到端联调验证](task2.5_e2e_verification.md)** | E2E 测试脚本、Vite 代理验证 | ~150 行 | 启动 TS 后端 + 前端，提交 Petition，验证 WS 事件触发像素动画 |
 
 ---
@@ -56,8 +56,8 @@ graph LR
     T24 --> T25[Task 2.5<br>端到端联调]
 ```
 
-> ✅ Task 2.1、2.2 已完成（共 66 个单测全绿）。下一步推进 Task 2.3 WebSocket 管理。
-> Task 2.4 必须等 2.1~2.3 全部完成后才能集成。
+> ✅ Task 2.1、2.2、2.3、2.4 已完成。
+> 随着 Pipeline 桥接与事件流集成收尾，目前的后端已经完全拥有了对前端动画场景的支持能力。下一步将推进最终验收：Task 2.5 端到端联调验证。
 > Task 2.5 是最终验收里程碑。
 
 ---

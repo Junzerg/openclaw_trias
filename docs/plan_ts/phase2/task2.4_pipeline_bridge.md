@@ -102,12 +102,22 @@ process.on('SIGINT', async () => {
 
 ## 验收维度
 
-- [ ] 启动 TS 后端 → `POST /petition` → Pipeline 实际运行
-- [ ] `wscat` 连接后，实时收到 `state_change`、`propose`、`brawl`、`order`、`vote_passed`、`sign_act`、`tool_call`、`constitutional`/`unconstitutional` 事件 JSON 流
-- [ ] 事件同时持久化到 SQLite `events` 表
-- [ ] `vote_passed` 事件自动保存法案到 `acts` 表
-- [ ] `constitutional`/`unconstitutional` 事件自动保存判决到 `verdicts` 表
-- [ ] `GET /task/:id/debate` 返回正确的辩论记录
-- [ ] `GET /task/:id/act` 返回正确的法案 JSON
-- [ ] `GET /task/:id/verdict` 返回正确的判决详情
-- [ ] 编写集成测试 `server/integration.test.ts`：模拟完整 Pipeline → 验证 DB + WS 事件链路
+- [x] 启动 TS 后端 → `POST /petition` → Pipeline 实际运行
+- [x] `wscat` 连接后，实时收到 `state_change`、`propose`、`brawl`、`order`、`vote_passed`、`sign_act`、`tool_call`、`constitutional`/`unconstitutional` 事件 JSON 流
+- [x] 事件同时持久化到 SQLite `events` 表
+- [x] `vote_passed` 事件自动保存法案到 `acts` 表
+- [x] `constitutional`/`unconstitutional` 事件自动保存判决到 `verdicts` 表
+- [x] `GET /task/:id/debate` 返回正确的辩论记录
+- [x] `GET /task/:id/act` 返回正确的法案 JSON
+- [x] `GET /task/:id/verdict` 返回正确的判决详情
+- [x] 编写集成测试 `server/integration.test.ts`：模拟完整 Pipeline → 验证 DB + WS 事件链路
+
+---
+
+## 💡 实施笔记 (Implementation Notes)
+
+1. **高内聚解耦模块 (`pipeline-bridge.ts`)**：没有直接将所有逻辑塞入 `app.ts`，而是独立为 `pipeline-bridge.ts` 以提供高度可测试的工厂方法 (`createWsBridge` / `createDbBridge`)，从而彻底隔离了生命周期。
+2. **零阻断错误隔离 (`runPetition`)**：实现了健壮的 FAILED 状态最终一致性兜底更新，并且 `WsBridge` 和 `DbBridge` 内置了 `try-catch` 防止单条日志落盘失败或个别 WS 客户端断连导致系统事件流直接崩溃。
+3. **入库序列化优化与数据重组设计**：与 Python 版将整包 `BaseEvent` 统统序列化入库的粗暴方式不同，TS 版底层的 `BaseAgent.emitEvent` 默认将 `payload` 内容展平在了根域与内部 `payload` 域两端，因此 `_dbBridge` **仅截取 `JSON.stringify(event.payload ?? {})`** 落盘。这不仅大幅优化了 SQLite `events` 表的数据容量，且在 `routes.ts` 做 `GET /task/:id/debate` 的 JSON 提取时天然匹配兼容 `payload.statement` 与 `payload.conflict_score` 的取值。
+4. **强类型约束修正**：修正了 `app.ts` 和 `websocket.ts` 中针对 `ConnectionManager` 参数类型定义，统一对齐到了 `IConnectionManager` 依赖倒置。
+5. **优雅关闭 (Graceful Shutdown)**：在 `index.ts` 捕获 `SIGINT/SIGTERM` 信号后，通过 `shutdownLifecycle` 预先解绑 MessageBus 的悬挂事件处理器并断开 HTTP 层 Socket，确保 SQLite WAL 写入完成后才关闭数据库进程。
