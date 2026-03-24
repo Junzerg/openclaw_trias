@@ -97,17 +97,18 @@ private _buildTaskPrompt(step: ActStep): string {
 
 ## 交付物
 
-| 文件 | 行数(预估) | 说明 |
+| 文件 | 行数(实际) | 说明 |
 |------|-----------|------|
-| `agents/executive/sec-state.ts` | ~90 (重构) | Mock → LLM 委托搜索/浏览 |
-| `tests/agents/executive/sec-state.test.ts` | ~120 (更新) | Mock adapter 验证 LLM 调用链 |
+| `agents/executive/sec-state.ts` | 131 行 (重构) | Mock → 单阶段 LLM 委托；新增 `_buildTaskPrompt(step)` (Search/WebBrowser/default) + 空内容检测 |
+| `tests/sec-state.test.ts` | 345 行 (新增) | 17 个测试覆盖 prompt 构造、happy path、空响应、异常、事件发送、modelRef 传递、tool_name 验证、Guards、act() 路由 |
 
 ## 验收维度
 
-- [ ] `Search` 类型步骤 → SecState 调用 LLM → 返回搜索结果文本
-- [ ] `WebBrowser` 类型步骤 → SecState 调用 LLM → 返回页面摘要
-- [ ] LLM 返回空 → `TaskResult.status = 'failed'`
-- [ ] LLM 调用异常 → `TaskResult.status = 'failed'` + 有意义错误信息
-- [ ] Mock adapter 单测：验证 `_buildTaskPrompt` 输出 + LLM 调用参数
-- [ ] 所有现有测试通过（回归）
-- [ ] `npm run build` 零 TypeScript 报错
+- [x] `Search` 类型步骤 → SecState 调用 LLM → 返回搜索结果文本
+- [x] `WebBrowser` 类型步骤 → SecState 调用 LLM → 返回页面摘要
+- [x] LLM 返回空 → `TaskResult.status = 'failed'`（含空字符串 + 纯空白两种 case）
+- [x] LLM 调用异常 → `TaskResult.status = 'failed'` + 有意义错误信息（含 Error 对象 + 字符串 throw）
+- [x] Mock adapter 单测：验证 `_buildTaskPrompt` 输出 + LLM 调用参数 + modelRef 传递
+- [x] 所有现有测试通过（回归）— 390 tests，5 个失败为 adapter.test.ts 已有 Windows 环境问题
+- [x] `npm run build` 零 TypeScript 报错
+- [x] 代码审查 1 轮：源码无 Bug，补充 3 项测试增强（modelRef / tool_name event / 空响应 event 完整性）

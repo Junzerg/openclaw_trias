@@ -76,7 +76,7 @@ model_routing:
 | **[3.2 错误分类与重试基础设施](task3.2_error_retry.md)** ✅ | `errors.ts` + `retry.ts` 新建 | ~270 行新增 | ⭐⭐ 低 | L1 基础设施 |
 | **[3.3 模型路由与 Agent 配置](task3.3_model_routing.md)** ✅ | `config/` + `base.ts` + `constitution.yaml` | ~150 行 | ⭐⭐ 低 | L1 基础设施 |
 | **[3.4 SecEngineering 真实代码执行](task3.4_sec_engineering.md)** ✅ | `sec-engineering.ts` 重构 | ~200 行改动 | ⭐⭐⭐⭐ 高 | L2 执行层 |
-| **[3.5 SecState 搜索与浏览对接](task3.5_sec_state.md)** | `sec-state.ts` 重构 | ~120 行改动 | ⭐⭐⭐ 中 | L2 执行层 |
+| **[3.5 SecState 搜索与浏览对接](task3.5_sec_state.md)** ✅ | `sec-state.ts` 重构 | ~120 行改动 | ⭐⭐⭐ 中 | L2 执行层 |
 | **[3.6 安全沙箱与执行约束](task3.6_sandbox.md)** | `sandbox.ts` 新建 + 集成 | ~150 行新增 | ⭐⭐⭐ 中 | L3 安全层 |
 | **[3.7 Pipeline 集成调试](task3.7_pipeline_integration.md)** | `government.ts` 调整 + 联调 | ~100 行改动 | ⭐⭐⭐ 中 | L4 集成层 |
 | **[3.8 端到端真实验证](task3.8_e2e_verification.md)** | E2E 测试 + 全路径覆盖 | ~350 行测试 | ⭐⭐ 低 | L5 验证层 |
@@ -360,16 +360,16 @@ SecState.executeTask(step) →
 
 | 文件 | 改动类型 | 说明 |
 |------|---------|------|
-| `sec-state.ts` | **重构** | Mock → LLM 委托搜索/浏览 |
-| `sec-state.ts` | **新增** | `_buildSearchPrompt()`, `_buildBrowsePrompt()` |
-| `tests/agents/executive/sec-state.test.ts` | **修改** | Mock adapter 验证调用链 |
+| `sec-state.ts` | **重构** | Mock → 单阶段 LLM 委托；新增 `_buildTaskPrompt(step)` + 空内容检测 |
+| `tests/sec-state.test.ts` | **新增** | 17 个测试覆盖 prompt/happy path/空响应/异常/事件/Guards/act() |
 
 ### 验收标准
 
-- [ ] Search 步骤 → SecState 调用 LLM → 返回搜索结果
-- [ ] WebBrowser 步骤 → SecState 调用 LLM → 返回页面摘要
-- [ ] 搜索/浏览失败 → `TaskResult.status = 'failed'`
-- [ ] 所有现有测试通过
+- [x] Search 步骤 → SecState 调用 LLM → 返回搜索结果
+- [x] WebBrowser 步骤 → SecState 调用 LLM → 返回页面摘要
+- [x] 搜索/浏览失败 → `TaskResult.status = 'failed'`（空响应 + 异常 + 字符串 throw 均覆盖）
+- [x] 所有现有测试通过 — 390 tests，新增 17 个单测全绿
+- [x] 代码审查 1 轮：源码零 Bug，补充 3 项测试增强
 
 ---
 

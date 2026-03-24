@@ -1,6 +1,6 @@
 import { BaseAgent, Branch, Permission } from '../base';
 import { EventAction } from '../../schemas/events';
-import { ExecutionTask, TaskResult } from '../../schemas/act';
+import { ActStep, ExecutionTask, TaskResult } from '../../schemas/act';
 import { OpenClawAdapter } from '../../openclaw/adapter';
 import { MessageBus } from '../../bus/message-bus';
 
@@ -10,6 +10,42 @@ export class SecretaryOfState extends BaseAgent {
   constructor(adapter: OpenClawAdapter, bus?: MessageBus) {
     super('Sec. of State', 'sec_state', Branch.EXECUTIVE, [Permission.EXECUTE], adapter, bus, true);
   }
+
+  // ── Prompt Construction ─────────────────────────────────────────────────
+
+  /**
+   * Build a role-specific prompt for the given step.
+   * Search → summarized search results; WebBrowser → page content extraction.
+   */
+  public _buildTaskPrompt(step: ActStep): string {
+    switch (step.required_skill) {
+      case 'Search':
+        return `你现在是国务卿（Secretary of State）。请使用你的搜索工具（Search）完成以下任务。
+返回搜索到的关键信息摘要，确保信息准确且相关。
+
+任务：${step.description}
+
+要求：
+- 使用搜索工具查找相关信息
+- 返回精炼的结果摘要（不超过 2000 字）
+- 如果搜索无果，明确说明`;
+
+      case 'WebBrowser':
+        return `你现在是国务卿（Secretary of State）。请使用你的浏览器工具（WebBrowser）完成以下任务。
+
+任务：${step.description}
+
+要求：
+- 使用浏览器工具访问相关页面
+- 提取并返回页面的关键内容
+- 如果页面无法访问，说明原因`;
+
+      default:
+        return `请完成以下任务：${step.description}`;
+    }
+  }
+
+  // ── Main Execution ──────────────────────────────────────────────────────
 
   public async executeTask(task: ExecutionTask): Promise<TaskResult> {
     this.requirePermission(Permission.EXECUTE);
@@ -27,9 +63,28 @@ export class SecretaryOfState extends BaseAgent {
     }, undefined, task.task_id);
 
     try {
-      // Mock execution for Search/WebBrowser
-      const output = `[Mock] ${this.role} 完成步骤 ${task.step.index}: ${task.step.description}`;
-      // emit success
+      const prompt = this._buildTaskPrompt(task.step);
+      const result = await this.callLLM(prompt);
+
+      // Empty content → treat as failure
+      if (!result.content || !result.content.trim()) {
+        this.emitEvent(EventAction.TOOL_CALL, {
+          tool_name: task.step.required_skill,
+          step_index: task.step.index,
+          status: 'failed',
+          error: 'LLM returned empty response',
+        }, undefined, task.task_id);
+
+        return {
+          task_id: task.task_id,
+          step_index: task.step.index,
+          status: 'failed',
+          output: '',
+          tokens_consumed: 0,
+          error: 'LLM returned empty response',
+        };
+      }
+
       this.emitEvent(EventAction.TOOL_CALL, {
         tool_name: task.step.required_skill,
         step_index: task.step.index,
@@ -40,11 +95,11 @@ export class SecretaryOfState extends BaseAgent {
         task_id: task.task_id,
         step_index: task.step.index,
         status: 'success',
-        output: output,
+        output: result.content,
         tokens_consumed: task.step.estimated_tokens,
       };
     } catch (err: any) {
-      // emit failure
+      // Emit failure event
       this.emitEvent(EventAction.TOOL_CALL, {
         tool_name: task.step.required_skill,
         step_index: task.step.index,
@@ -52,6 +107,7 @@ export class SecretaryOfState extends BaseAgent {
         error: err.message || String(err),
       }, undefined, task.task_id);
 
+      // Return structured failure — never block the Pipeline
       return {
         task_id: task.task_id,
         step_index: task.step.index,
