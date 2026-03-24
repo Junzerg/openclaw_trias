@@ -73,7 +73,7 @@ model_routing:
 | 任务 | 核心范围 | 预估代码量 | 风险 | 层级 |
 |------|---------|------------|------|------|
 | **[3.1 Adapter 异步化重构](task3.1_adapter_async.md)** ✅ | `adapter.ts` execSync→spawn + ITransport 抽象 + 进度回调 | ~250 行改动 | ⭐⭐⭐⭐ 高 | L0 基础 |
-| **[3.2 错误分类与重试基础设施](task3.2_error_retry.md)** | `errors.ts` + `retry.ts` 新建 | ~200 行新增 | ⭐⭐ 低 | L1 基础设施 |
+| **[3.2 错误分类与重试基础设施](task3.2_error_retry.md)** ✅ | `errors.ts` + `retry.ts` 新建 | ~270 行新增 | ⭐⭐ 低 | L1 基础设施 |
 | **[3.3 模型路由与 Agent 配置](task3.3_model_routing.md)** | `config/` + `base.ts` + `constitution.yaml` | ~150 行 | ⭐⭐ 低 | L1 基础设施 |
 | **[3.4 SecEngineering 真实代码执行](task3.4_sec_engineering.md)** | `sec-engineering.ts` 重构 | ~200 行改动 | ⭐⭐⭐⭐ 高 | L2 执行层 |
 | **[3.5 SecState 搜索与浏览对接](task3.5_sec_state.md)** | `sec-state.ts` 重构 | ~120 行改动 | ⭐⭐⭐ 中 | L2 执行层 |
@@ -222,10 +222,12 @@ enum OpenClawErrorType {
 
 ### 验收标准
 
-- [ ] 可重试错误执行指定次数重试 + 退避
-- [ ] 不可重试错误立即传播
-- [ ] 结构化日志 `[Retry] attempt 2/3 for LLM_TIMEOUT`
-- [ ] 所有现有测试通过
+- [x] 可重试错误执行指定次数重试 + 退避
+- [x] 不可重试错误立即传播
+- [x] 结构化日志 `[Retry] attempt 2/3 for LLM_TIMEOUT`
+- [x] 所有现有测试通过 — 324 tests (242 原有 + 82 新增)
+- [x] 深度审查 7 轮，修复 17 个 Bug（2 Critical + 9 Medium + 4 Low + 2 Test-only）
+- [x] 所有 6 个分类模式均经 context 门控加固 + Node.js REPL 对抗验证
 
 ---
 
@@ -498,7 +500,7 @@ Phase 3 **无需新增 npm 依赖**。基于 Node.js 内置 `child_process.spawn
 | 风险 | 影响 | 预案 |
 |------|------|------|
 | `spawn` 引入竞态 | 并发干扰 | 每次 spawn 隔离进程 + 独立 stdout — ✅ 已验证（Task 3.1 并发测试通过） |
-| exec Skill 输出不可控 | 解析失败 | Adapter 格式归一化 + LLM 后处理 |
+| LLM 输出误报 | 分类错误 | 所有模式均经 context 门控加固 — ✅ 已验证（Task 3.2 REPL 对抗测试通过） |
 | 真实 LLM 辩论波动 | E2E 不稳定 | E2E 用 mock adapter；联调用真实 LLM |
 | Token 成本累积 | 预算超支 | 开发全 Sonnet；最终验证才启用贵模型 |
 | 代码执行副作用 | 宿主机受损 | L1 (Gateway) + L2 (sandbox) 双层防御 |

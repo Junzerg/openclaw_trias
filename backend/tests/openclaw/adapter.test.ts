@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { OpenClawAdapter, type ITransport } from '../../src/openclaw/adapter.js';
+import { OpenClawAdapter, type ITransport, OpenClawError, OpenClawErrorType } from '../../src/openclaw/adapter.js';
 
 // ─── Mock Transport ──────────────────────────────────────────────────────────
 
@@ -115,11 +115,17 @@ describe('OpenClawAdapter', () => {
       );
     });
 
-    it('throws when CLI output indicates gateway failure', async () => {
-      transport.responses = ['gateway connect failed: connection refused'];
-      await expect(adapter.callLLM('s', 'u')).rejects.toThrow(
-        'OpenClaw Gateway Connection Failed',
-      );
+    it('throws OpenClawError(GATEWAY_DISCONNECT) on gateway failure', async () => {
+      // Provide enough responses for retry cycle (initial + 2 retries)
+      transport.responses = [
+        'gateway connect failed: connection refused',
+        'gateway connect failed: connection refused',
+        'gateway connect failed: connection refused',
+      ];
+      await expect(adapter.callLLM('s', 'u')).rejects.toSatisfy((err: unknown) => {
+        return err instanceof OpenClawError &&
+               err.type === OpenClawErrorType.GATEWAY_DISCONNECT;
+      });
     });
 
     it('does NOT false-positive when LLM mentions gateway errors in content', async () => {
@@ -144,12 +150,57 @@ describe('OpenClawAdapter', () => {
       expect(result.content).toContain('gateway closed gracefully');
     });
 
-    it('throws when LLM returns empty output', async () => {
+    it('throws OpenClawError(JSON_PARSE_ERROR) when LLM returns empty output', async () => {
       // All lines are spinner/banner characters → cleaned output is empty
-      transport.responses = ['🦞 OpenClaw v1.2.3\n⠋ Loading...'];
-      await expect(adapter.callLLM('s', 'u')).rejects.toThrow(
-        'LLM returned empty or unparseable response',
-      );
+      // Provide enough responses for retry cycle (initial + 2 retries)
+      transport.responses = [
+        '🦞 OpenClaw v1.2.3\n⠋ Loading...',
+        '🦞 OpenClaw v1.2.3\n⠋ Loading...',
+        '🦞 OpenClaw v1.2.3\n⠋ Loading...',
+      ];
+      await expect(adapter.callLLM('s', 'u')).rejects.toSatisfy((err: unknown) => {
+        return err instanceof OpenClawError &&
+               err.type === OpenClawErrorType.JSON_PARSE_ERROR;
+      });
+    });
+  });
+
+  describe('Unit — callLLM retry integration', () => {
+    it('retries on JSON_PARSE_ERROR then succeeds on 2nd try', async () => {
+      const transport = new MockTransport([
+        '🦞 OpenClaw v1.2.3\n⠋ Loading...',   // empty → JSON_PARSE_ERROR (retryable)
+        'Recovered LLM response content',       // second try succeeds
+      ]);
+      const adapter = new OpenClawAdapter({ timeoutSeconds: 10 }, transport);
+      const result = await adapter.callLLM('sys', 'hello');
+      expect(result.content).toBe('Recovered LLM response content');
+      expect(transport.sendCalls.length).toBe(2); // initial + 1 retry
+    });
+
+    it('classifies CLI transport timeout as retryable LLM_TIMEOUT', async () => {
+      const transport = new MockTransport([]);
+      transport.errorToThrow = new Error('CLI timeout after 10000ms');
+      const adapter = new OpenClawAdapter({ timeoutSeconds: 10 }, transport);
+      await expect(adapter.callLLM('s', 'u')).rejects.toSatisfy((err: unknown) => {
+        return err instanceof OpenClawError &&
+               err.type === OpenClawErrorType.LLM_TIMEOUT &&
+               err.retryable === true;
+      });
+    });
+
+    it('non-retryable MODEL_NOT_FOUND is not retried', async () => {
+      const transport = new MockTransport([
+        'Error: model not found: gpt-99',
+        'Error: model not found: gpt-99',
+        'Error: model not found: gpt-99',
+      ]);
+      const adapter = new OpenClawAdapter({ timeoutSeconds: 10 }, transport);
+      await expect(adapter.callLLM('s', 'u')).rejects.toSatisfy((err: unknown) => {
+        return err instanceof OpenClawError &&
+               err.type === OpenClawErrorType.MODEL_NOT_FOUND;
+      });
+      // Non-retryable: should only attempt once (no retries)
+      expect(transport.sendCalls.length).toBe(1);
     });
   });
 
@@ -167,6 +218,58 @@ describe('OpenClawAdapter', () => {
       const result = await adapter.executeCode('console.log("hi")', 'javascript');
       expect(result.stdout).toContain('hello from openclaw');
       expect(result.exitCode).toBe(0);
+    });
+
+    it('throws OpenClawError on gateway failure during code execution', async () => {
+      const transport = new MockTransport([
+        'gateway connect failed: ECONNREFUSED',
+        'gateway connect failed: ECONNREFUSED',
+        'gateway connect failed: ECONNREFUSED',
+      ]);
+      const adapter = new OpenClawAdapter({ timeoutSeconds: 10 }, transport);
+      await expect(adapter.executeCode('1+1', 'javascript')).rejects.toSatisfy((err: unknown) => {
+        return err instanceof OpenClawError &&
+               err.type === OpenClawErrorType.GATEWAY_DISCONNECT;
+      });
+    });
+
+    it('classifies CLI timeout as retryable during code execution', async () => {
+      const transport = new MockTransport([]);
+      transport.errorToThrow = new Error('CLI timeout after 10000ms');
+      const adapter = new OpenClawAdapter({ timeoutSeconds: 10 }, transport);
+      await expect(adapter.executeCode('while(true){}', 'javascript')).rejects.toSatisfy((err: unknown) => {
+        return err instanceof OpenClawError &&
+               err.type === OpenClawErrorType.LLM_TIMEOUT &&
+               err.retryable === true;
+      });
+    });
+  });
+
+  describe('Unit — wrapError edge cases', () => {
+    it('wraps non-Error thrown values (e.g. string) as generic Error', async () => {
+      // MockTransport only throws Error objects, so we simulate the non-Error path
+      // by testing callLLM with a custom transport that throws a string
+      const transport: ITransport = {
+        async send() { throw 'raw string error'; },
+      };
+      const adapter = new OpenClawAdapter({ timeoutSeconds: 10 }, transport);
+      await expect(adapter.callLLM('s', 'u')).rejects.toSatisfy((err: unknown) => {
+        return err instanceof Error &&
+               !(err instanceof OpenClawError) &&
+               err.message.includes('raw string error');
+      });
+    });
+  });
+
+  describe('Unit — ANSI stripping', () => {
+    it('strips ANSI color codes and extracts clean content', async () => {
+      const transport = new MockTransport([
+        '\x1b[32m✓\x1b[0m Clean response after ANSI codes',
+      ]);
+      const adapter = new OpenClawAdapter({ timeoutSeconds: 10 }, transport);
+      const result = await adapter.callLLM('sys', 'hello');
+      expect(result.content).not.toContain('\x1b');
+      expect(result.content).toContain('Clean response after ANSI codes');
     });
   });
 

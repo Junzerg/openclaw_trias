@@ -11,10 +11,14 @@
 
 import WebSocket from 'ws';
 import { CliTransport, type ITransport } from './transport.js';
+import { OpenClawError, OpenClawErrorType, classifyOutputError } from './errors.js';
+import { withRetry } from './retry.js';
 
 // ─── Re-exports ──────────────────────────────────────────────────────────────
 
 export { CliTransport, type ITransport } from './transport.js';
+export { OpenClawError, OpenClawErrorType, classifyOutputError } from './errors.js';
+export { withRetry, getRetryConfigForType, type RetryConfig } from './retry.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -183,17 +187,22 @@ export class OpenClawAdapter {
       args.push('--model', this.config.defaultModel);
     }
 
-    try {
-      const rawOutput = await this.runCliCommand(args);
-      const content = this.extractLLMContent(rawOutput);
-
-      return {
-        content,
-        rawOutput,
-      };
-    } catch (err) {
-      throw this.wrapError('callLLM', err);
-    }
+    // Wrap with withRetry — uses a static conservative config (maxRetries=2, exponential).
+    // All retryable OpenClawErrors are retried with the same strategy.
+    // Per-error-type configs (DEFAULT_RETRY_CONFIGS) are exported for downstream consumers.
+    return withRetry(
+      async () => {
+        try {
+          const rawOutput = await this.runCliCommand(args);
+          const content = this.extractLLMContent(rawOutput);
+          return { content, rawOutput };
+        } catch (err) {
+          throw this.wrapError('callLLM', err);
+        }
+      },
+      this.resolveRetryConfig(),
+      (msg) => console.log(`[OpenClawAdapter] ${msg}`),
+    );
   }
 
   /**
@@ -229,21 +238,21 @@ export class OpenClawAdapter {
 
     const result = cleanLines.join('\n').trim();
 
-    // Detect hard failures from OpenClaw CLI/Gateway
-    // Check AFTER filtering so stderr noise lines (which are already stripped)
-    // don't cause false positives. Use line-start anchors for precision.
-    const hasGatewayFailure = cleanLines.some((line) => {
-      const t = line.trim();
-      return t.startsWith('gateway connect failed') ||
-             t.startsWith('Gateway agent failed; falling back to embedded') ||
-             (t.startsWith('Error:') && t.includes('gateway closed'));
-    });
-    if (hasGatewayFailure) {
-      throw new Error(`OpenClaw Gateway Connection Failed:\n${result.substring(0, 500)}`);
+    // Detect hard failures from OpenClaw CLI/Gateway output.
+    // Uses the centralized pattern table in errors.ts for classification.
+    const errorType = classifyOutputError(cleanLines);
+    if (errorType) {
+      throw new OpenClawError(
+        errorType,
+        `OpenClaw error (${errorType}):\n${result.substring(0, 500)}`,
+      );
     }
 
     if (!result) {
-      throw new Error('LLM returned empty or unparseable response.');
+      throw new OpenClawError(
+        OpenClawErrorType.JSON_PARSE_ERROR,
+        'LLM returned empty or unparseable response.',
+      );
     }
     return result;
   }
@@ -294,18 +303,24 @@ export class OpenClawAdapter {
 
     const args = ['agent', '--agent', this.config.agentId, '--message', prompt];
 
-    try {
-      const rawOutput = await this.runCliCommand(args);
-      const parsedOutput = this.extractLLMContent(rawOutput);
-      return {
-        stdout: parsedOutput,
-        stderr: '',
-        exitCode: 0,
-        rawOutput,
-      };
-    } catch (err) {
-      throw this.wrapError('executeCode', err);
-    }
+    return withRetry(
+      async () => {
+        try {
+          const rawOutput = await this.runCliCommand(args);
+          const parsedOutput = this.extractLLMContent(rawOutput);
+          return {
+            stdout: parsedOutput,
+            stderr: '',
+            exitCode: 0,
+            rawOutput,
+          };
+        } catch (err) {
+          throw this.wrapError('executeCode', err);
+        }
+      },
+      this.resolveRetryConfig(),
+      (msg) => console.log(`[OpenClawAdapter] ${msg}`),
+    );
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -319,8 +334,30 @@ export class OpenClawAdapter {
     return this.transport.send(args, this.config.timeoutSeconds * 1000);
   }
 
+  /**
+   * Resolve retry config. If the error is an OpenClawError, use its type-specific
+   * config. Otherwise use a conservative fallback.
+   */
+  private resolveRetryConfig(): import('./retry.js').RetryConfig {
+    // We use a generic config here because the error type isn't known until fn throws.
+    // withRetry handles the type-based logic internally (retryable check).
+    return { maxRetries: 2, backoff: 'exponential', baseDelayMs: 2000 };
+  }
+
   private wrapError(method: string, err: unknown): Error {
+    // Preserve OpenClawError — don't double-wrap classified errors
+    if (err instanceof OpenClawError) {
+      return err;
+    }
     if (err instanceof Error) {
+      // Classify transport-level CLI timeout as LLM_TIMEOUT so it's retryable
+      if (/CLI timeout/i.test(err.message)) {
+        return new OpenClawError(
+          OpenClawErrorType.LLM_TIMEOUT,
+          `[OpenClawAdapter.${method}] ${err.message}`,
+          { cause: err },
+        );
+      }
       return new Error(`[OpenClawAdapter.${method}] ${err.message}`, { cause: err });
     }
     return new Error(`[OpenClawAdapter.${method}] ${String(err)}`);

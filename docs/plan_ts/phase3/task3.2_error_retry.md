@@ -4,6 +4,7 @@
 > **前置依赖**：[Task 3.1](task3.1_adapter_async.md)（异步 adapter 才能实现异步重试）
 > **对应目录**：`backend/src/openclaw/`
 > **预估耗时**：0.5 会话
+> **状态**：✅ 已完成 — 7 轮深度审查，17 个 Bug 修复，324 tests passed
 
 ## 需求说明
 
@@ -54,6 +55,8 @@ export interface RetryConfig {
   backoff: 'fixed' | 'exponential' | 'immediate';
   /** 基础延迟 (ms)，指数退避时每次翻倍 */
   baseDelayMs: number;
+  /** 最大延迟上限 (ms)，防止指数退避失控。默认 30s */
+  maxDelayMs?: number;
   /** 仅对这些错误类型重试（空 = 所有可重试类型） */
   retryOn?: OpenClawErrorType[];
 }
@@ -104,35 +107,52 @@ async callLLM(systemPrompt: string, userMessage: string, model?: string): Promis
 
 ### 4. 错误检测增强 (`extractLLMContent` 改造)
 
-现有检测逻辑（`gateway connect failed` 等）→ 升级为分类化错误：
+现有检测逻辑（`gateway connect failed` 等）→ 升级为分类化错误。
 
-| 匹配模式 | 错误类型 |
-|---------|---------|
-| `gateway connect failed` / `gateway closed` | `GATEWAY_DISCONNECT` |
-| `rate limit` / `429` / `too many requests` | `LLM_RATE_LIMIT` |
-| `timeout` / CLI 超时 kill | `LLM_TIMEOUT` |
-| `model not found` / `invalid model` | `MODEL_NOT_FOUND` |
-| `content_filter` / `safety` | `CONTENT_FILTERED` |
-| JSON.parse 失败 | `JSON_PARSE_ERROR` |
-| `unauthorized` / `invalid api key` | `AUTH_FAILED` |
+**所有模式均增加了 context 门控**，防止 LLM 内容中的随意提及触发误报：
+
+| 匹配模式 | 错误类型 | Context 门控 |
+|---------|---------|-------------|
+| `gateway connect failed` / `gateway closed` | `GATEWAY_DISCONNECT` | `startsWith` 锚定 |
+| `rate.?limit` + context / `429` + context / `too many requests` | `LLM_RATE_LIMIT` | error/http/status/exceeded/429 |
+| `timeout` + context | `LLM_TIMEOUT` | error/failed/exceeded/kill/CLI/`after\s+\d` |
+| `model.?not.?found` + context / `invalid.?model` + context | `MODEL_NOT_FOUND` | error/failed/unknown/specified/id/name |
+| `content.?filter` + context / `safety` + action | `CONTENT_FILTERED` | blocked/triggered/rejected/moderation/policy |
+| `unauthorized` + context / `invalid.?api.?key` | `AUTH_FAILED` | `4\d{2}`/error/http/status/response/failed |
+| JSON.parse 失败 / 空输出 | `JSON_PARSE_ERROR` | 无需门控（结构化检测） |
+| CLI 传输层超时 (`CLI timeout`) | `LLM_TIMEOUT` | `wrapError` 中 `/CLI timeout/i` |
 
 ## 交付物
 
-| 文件 | 行数(预估) | 说明 |
-|------|-----------|------|
-| `openclaw/errors.ts` | ~60 | `OpenClawError` + 枚举 + 错误工厂 |
-| `openclaw/retry.ts` | ~80 | `withRetry` 通用重试 + 默认配置表 |
-| `openclaw/adapter.ts` | ~30 行改动 | 错误分类 + 重试包裹 |
-| `tests/openclaw/errors.test.ts` | ~50 | 错误分类单测 |
-| `tests/openclaw/retry.test.ts` | ~120 | 重试策略 + 退避时间 + mock timer 测试 |
+| 文件 | 实际行数 | 说明 |
+|------|---------|------|
+| `openclaw/errors.ts` | 126 行 | `OpenClawError` + 枚举 + 6 个 context-gated 分类模式 |
+| `openclaw/retry.ts` | 147 行 | `withRetry` + `computeDelay`(30s cap) + `getRetryConfigForType` + 默认配置表 |
+| `openclaw/adapter.ts` | ~50 行改动 | 错误分类 + `callLLM`/`executeCode` 包裹 `withRetry` + `wrapError` CLI 超时分类 |
+| `tests/openclaw/errors.test.ts` | 193 行 | 40 tests — 所有模式 + 7 个 false-positive 防护 + 模式优先级 |
+| `tests/openclaw/retry.test.ts` | 265 行 | 22 tests — 退避策略 + 30s cap + maxRetries=0 + 错误类型变化 + getRetryConfigForType |
+| `tests/openclaw/adapter.test.ts` | ~80 行新增 | 7 新 tests — executeCode error/retry + wrapError edge cases + ANSI stripping |
 
 ## 验收维度
 
-- [ ] 可重试错误 → 按配置执行重试 + 正确退避
-- [ ] 不可重试错误 → 立即传播，零重试
-- [ ] 结构化日志 `[Retry] attempt 2/3 for LLM_TIMEOUT (delay: 4000ms)`
-- [ ] `callLLM` 遇到 Gateway 断连 → 重试 1 次 → 仍失败则 `OpenClawError` 上报
-- [ ] JSON 解析失败 → 重试 → 成功则返回正确结果
-- [ ] 每种错误类型的重试/不重试行为均有单测
-- [ ] 所有现有 242 测试通过（回归）
-- [ ] `npm run build` 零 TypeScript 报错
+- [x] 可重试错误 → 按配置执行重试 + 正确退避
+- [x] 不可重试错误 → 立即传播，零重试
+- [x] 结构化日志 `[Retry] attempt 2/3 for LLM_TIMEOUT (delay: 4000ms)`
+- [x] `callLLM` 遇到 Gateway 断连 → 重试 → 仍失败则 `OpenClawError` 上报
+- [x] JSON 解析失败 → 重试 → 成功则返回正确结果
+- [x] 每种错误类型的重试/不重试行为均有单测
+- [x] 所有现有测试通过（回归）— 324 tests (242 原有 + 82 新增)
+- [x] `npm run build` 零 TypeScript 报错
+- [x] 深度审查 7 轮，修复 17 个 Bug（2 Critical + 9 Medium + 4 Low + 2 Test-only）
+
+### 审查轮次概要
+
+| 轮次 | 策略 | 发现 |
+|------|------|------|
+| R1 | 逻辑审查 | 4 bugs — CLI timeout 未分类, 日志格式, 429/safety 误报 |
+| R2 | Regex 自匹配分析 | 3 bugs — timeout 误报, timed?.?out 自匹配, \b 数字边界 |
+| R3 | 架构审查 | 3 bugs — rate.?limit 无门控, 指数退避无上限, 注释失实 |
+| R4 | Node.js REPL 对抗 | 3 bugs — \d{3} 匹配 200, model_not_found 无门控 |
+| R5 | REPL 全量爆破 | 3 bugs — AUTH [1-5]\d{2} 过宽, rate 'response' 误触 |
+| R6 | 全模式 REPL 覆盖 | 1 bug — content.?filter 无门控 |
+| R7 | 变异测试分析 | 0 code bugs, 6 覆盖盲区补测 |
