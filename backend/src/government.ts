@@ -10,7 +10,7 @@ import { ChiefJustice } from './agents/judicial/chief-justice';
 import { MessageBus } from './bus/message-bus';
 import { EventLogger } from './bus/event-log';
 import { BillLifecycle, BillState } from './bus/state-machine';
-import { loadConstitution } from './config/loader';
+import { loadConstitution, resolveModel } from './config/loader';
 import { ConstitutionConfig } from './config/models';
 import { OpenClawAdapter } from './openclaw/adapter';
 import { 
@@ -54,6 +54,7 @@ export class CyberGovernment {
     this._initLegislative();
     this._initExecutive();
     this._initJudicial();
+    this._applyModelRouting();
     this._registerSubscribers();
   }
 
@@ -81,6 +82,25 @@ export class CyberGovernment {
 
   private _initJudicial(): void {
     this.chiefJustice = new ChiefJustice(this.constitution, this.adapter, this.bus);
+  }
+
+  /**
+   * Inject per-agent model overrides from constitution.model_routing.
+   * Must be called after all agents are initialized.
+   */
+  private _applyModelRouting(): void {
+    const routing = this.constitution.model_routing;
+    if (!routing) return;
+
+    const agents = [
+      this.speaker, this.radicalMp, this.conservativeMp,
+      this.president, this.secEngineering, this.secState,
+      this.chiefJustice,
+    ];
+
+    for (const agent of agents) {
+      agent.modelRef = resolveModel(agent.role, routing);
+    }
   }
 
   private _registerSubscribers(): void {

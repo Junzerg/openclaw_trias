@@ -12,7 +12,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 
 export interface ITransport {
   /** Send a command and wait for the complete response. */
-  send(args: string[], timeoutMs: number): Promise<string>;
+  send(args: string[], timeoutMs: number, env?: NodeJS.ProcessEnv): Promise<string>;
 
   /**
    * Register a progress callback. Called every ~3 s while a command is running.
@@ -41,7 +41,7 @@ export class CliTransport implements ITransport {
     this.progressCallback = callback;
   }
 
-  async send(args: string[], timeoutMs: number): Promise<string> {
+  async send(args: string[], timeoutMs: number, env?: NodeJS.ProcessEnv): Promise<string> {
     return new Promise<string>((resolve, reject) => {
       // Spawn the CLI binary directly — no bash wrapper.
       // This ensures SIGTERM on timeout kills the actual process (not just a
@@ -50,7 +50,7 @@ export class CliTransport implements ITransport {
       const child: ChildProcess = spawn(
         this.cliBin,
         args,
-        { env: { ...process.env } },
+        { env: env ? { ...process.env, ...env } : { ...process.env } },
       );
 
       let output = '';

@@ -97,7 +97,7 @@ describe('BaseAgent', () => {
 
     const response = await agent.publicCallLLM('What is 1+1?');
     expect(response.content).toBe('Mocked Response');
-    expect(adapter.callLLM).toHaveBeenCalledWith('Dummy Prompt context.', 'What is 1+1?');
+    expect(adapter.callLLM).toHaveBeenCalledWith('Dummy Prompt context.', 'What is 1+1?', undefined);
   });
 
   it('should emit events correctly to MessageBus', () => {

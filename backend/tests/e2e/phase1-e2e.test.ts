@@ -34,7 +34,7 @@ const configDir = resolve(__dirname, '../../../config');
  */
 function createMockedGov(callLLMResponses: string[]): {
   gov: CyberGovernment;
-  callLLMSpy: MockInstance<(systemPrompt: string, userMessage: string) => Promise<LLMResponse>>;
+  callLLMSpy: MockInstance<(systemPrompt: string, userMessage: string, model?: string) => Promise<LLMResponse>>;
 } {
   const gov = new CyberGovernment(configDir);
   const responseQueue = [...callLLMResponses];

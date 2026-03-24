@@ -30,6 +30,8 @@ export abstract class BaseAgent {
   public role: string;
   public branch: Branch;
   public systemPrompt: string = '';
+  /** Per-agent model override, injected by Government from model_routing config */
+  public modelRef?: string;
 
   protected readonly _permissions: Set<Permission>;
   protected _tools: string[];
@@ -92,7 +94,7 @@ export abstract class BaseAgent {
   protected async callLLM(prompt: string): Promise<LLMResponse> {
     const heartbeat = this.startProgressHeartbeat();
     try {
-      return await this.adapter.callLLM(this.systemPrompt, prompt);
+      return await this.adapter.callLLM(this.systemPrompt, prompt, this.modelRef);
     } finally {
       clearInterval(heartbeat);
     }

@@ -66,20 +66,21 @@ export abstract class BaseAgent {
 }
 ```
 
-### 5. Adapter (`adapter.ts` 修改)
+### 5. Adapter (`adapter.ts`修改)
 
-- `callLLM` 签名增加可选 `model` 参数
-- 如果传入 `model`，覆盖 `--model` CLI 选项
+- `callLLM` 和 `executeCode` 签名增加可选 `model` 参数
+- 如果传入 `model`，注入 `OPENCLAW_MODEL` 环境变量到 Node.js Spawn 进程中（因为 OpenClaw 原生暂不支持 `--model` 命令行标志）
 
 ```typescript
 async callLLM(systemPrompt: string, userMessage: string, model?: string): Promise<LLMResponse> {
   const args = ['agent', '--agent', this.config.agentId, '--message', fullMessage];
   // model 优先级：显式传入 > config.defaultModel > 不传
   const effectiveModel = model ?? this.config.defaultModel;
+  const envOverride: NodeJS.ProcessEnv = {};
   if (effectiveModel) {
-    args.push('--model', effectiveModel);
+    envOverride.OPENCLAW_MODEL = effectiveModel;
   }
-  ...
+  return await this.runCliCommand(args, envOverride);
 }
 ```
 
@@ -112,17 +113,18 @@ private _applyModelRouting(): void {
 | `config/loader.ts` | ~15 行新增 | 解析 + `resolveModel()` |
 | `constitution.yaml` | ~10 行新增 | `model_routing` 示例配置 |
 | `agents/base.ts` | ~5 行改动 | `modelRef` 属性 + callLLM 传参 |
-| `openclaw/adapter.ts` | ~5 行改动 | `callLLM` 增加 model 参数 |
+| `openclaw/transport.ts` | ~10 行改动 | `ITransport.send` 增加 `env` 重载参数 |
+| `openclaw/adapter.ts` | ~15 行改动 | `callLLM` & `executeCode` 增加 `OPENCLAW_MODEL` 注入 |
 | `government.ts` | ~15 行新增 | `_applyModelRouting()` 注入 |
-| `tests/config/model-routing.test.ts` | ~100 | Zod 校验 + fallback + 注入链 |
+| `tests/config/model-routing.test.ts` | ~200 | Zod 校验 + fallback + 注入链 + 拦截验证 |
 
 ## 验收维度
 
-- [ ] `constitution.yaml` 新增 `model_routing` 段，用户可自由配置 `role → model`
-- [ ] LLM 调用日志中可见 `--model xxx` 参数正确传递
-- [ ] `model_routing` 段缺失 → `resolveModel` 返回 `undefined` → adapter 使用内置 `defaultModel`（向后兼容）
-- [ ] `overrides` 中未列出的角色 → 使用 `model_routing.default`
-- [ ] `overrides` 中列出的角色 → 使用指定模型
-- [ ] Zod schema 校验：缺少 `default` 字段 → 报错
-- [ ] 所有现有测试通过（回归）
-- [ ] `npm run build` 零 TypeScript 报错
+- [x] `constitution.yaml` 新增 `model_routing` 段，用户可自由配置 `role → model`
+- [x] LLM 调用日志中可见 `OPENCLAW_MODEL=xxx` 参数正确传递
+- [x] `model_routing` 段缺失 → `resolveModel` 返回 `undefined` → adapter 使用内置 `defaultModel`（向后兼容）
+- [x] `overrides` 中未列出的角色 → 使用 `model_routing.default`
+- [x] `overrides` 中列出的角色 → 使用指定模型
+- [x] Zod schema 校验：缺少 `default` 字段 → 报错
+- [x] 所有现有测试通过（回归）
+- [x] `npm run build` 零 TypeScript 报错

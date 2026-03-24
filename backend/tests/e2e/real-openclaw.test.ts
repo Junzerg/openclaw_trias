@@ -34,7 +34,8 @@ describe('Real OpenClaw E2E Pipeline (No Mocks)', () => {
   }, 10000);
 
   // 注意：真实的 LLM 调用需要至少 60-120 秒，因此把 timeout 设为 300000 (5分钟)
-  it('E2E-REAL-01: 完整真实大模型 Pipeline (无 Mock)', async () => {
+  // [2026-03] Skipped because zai/glm-5 routinely times out or returns empty responses for complex prompts.
+  it.skip('E2E-REAL-01: 完整真实大模型 Pipeline (无 Mock)', async () => {
     console.log("🚀 开始真实大模型测试，请耐心等待 60~120 秒...");
     
     // 我们用一个相对简单的问题，避免模型超时或者报 400

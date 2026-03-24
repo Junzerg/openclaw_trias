@@ -170,7 +170,7 @@ export class OpenClawAdapter {
    * The system prompt is prepended to the user message as context.
    * In Phase T4, this will use the WebSocket API with proper session management.
    */
-  async callLLM(systemPrompt: string, userMessage: string): Promise<LLMResponse> {
+  async callLLM(systemPrompt: string, userMessage: string, model?: string): Promise<LLMResponse> {
     // Compose the full prompt with system context
     const fullMessage = [
       '=== SYSTEM INSTRUCTIONS (follow these strictly) ===',
@@ -182,9 +182,12 @@ export class OpenClawAdapter {
 
     const args = ['agent', '--agent', this.config.agentId, '--message', fullMessage];
 
-    // Add model override if configured
-    if (this.config.defaultModel) {
-      args.push('--model', this.config.defaultModel);
+    // Model priority: explicit param > config.defaultModel > omit
+    const effectiveModel = model ?? this.config.defaultModel;
+    const envOverride: NodeJS.ProcessEnv = {};
+    if (effectiveModel) {
+      envOverride.OPENCLAW_MODEL = effectiveModel;
+      console.log(`[OpenClawAdapter] callLLM using OPENCLAW_MODEL=${effectiveModel}`);
     }
 
     // Wrap with withRetry — uses a static conservative config (maxRetries=2, exponential).
@@ -193,7 +196,7 @@ export class OpenClawAdapter {
     return withRetry(
       async () => {
         try {
-          const rawOutput = await this.runCliCommand(args);
+          const rawOutput = await this.runCliCommand(args, envOverride);
           const content = this.extractLLMContent(rawOutput);
           return { content, rawOutput };
         } catch (err) {
@@ -249,6 +252,7 @@ export class OpenClawAdapter {
     }
 
     if (!result) {
+      console.error(`[OpenClawAdapter] extractLLMContent failed. Raw stdout was:\n---\n${stdout}\n---`);
       throw new OpenClawError(
         OpenClawErrorType.JSON_PARSE_ERROR,
         'LLM returned empty or unparseable response.',
@@ -268,6 +272,7 @@ export class OpenClawAdapter {
   async executeCode(
     code: string,
     language: string = 'javascript',
+    model?: string,
   ): Promise<ExecResult> {
     const runtimeMap: Record<string, string> = {
       javascript: 'node -e',
@@ -303,10 +308,17 @@ export class OpenClawAdapter {
 
     const args = ['agent', '--agent', this.config.agentId, '--message', prompt];
 
+    const effectiveModel = model ?? this.config.defaultModel;
+    const envOverride: NodeJS.ProcessEnv = {};
+    if (effectiveModel) {
+      envOverride.OPENCLAW_MODEL = effectiveModel;
+      console.log(`[OpenClawAdapter] executeCode using OPENCLAW_MODEL=${effectiveModel}`);
+    }
+
     return withRetry(
       async () => {
         try {
-          const rawOutput = await this.runCliCommand(args);
+          const rawOutput = await this.runCliCommand(args, envOverride);
           const parsedOutput = this.extractLLMContent(rawOutput);
           return {
             stdout: parsedOutput,
@@ -330,8 +342,8 @@ export class OpenClawAdapter {
    *
    * Phase 3.1: Replaced `execSync` + temp file with `ITransport.send()`.
    */
-  private async runCliCommand(args: string[]): Promise<string> {
-    return this.transport.send(args, this.config.timeoutSeconds * 1000);
+  private async runCliCommand(args: string[], envOverrides?: NodeJS.ProcessEnv): Promise<string> {
+    return this.transport.send(args, this.config.timeoutSeconds * 1000, envOverrides);
   }
 
   /**

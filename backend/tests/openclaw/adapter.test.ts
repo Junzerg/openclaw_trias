@@ -20,7 +20,7 @@ class MockTransport implements ITransport {
   /** Queue of responses to return from `send()` — shifted in order. */
   public responses: string[];
   /** Recorded calls to `send()` for assertions. */
-  public sendCalls: { args: string[]; timeoutMs: number }[] = [];
+  public sendCalls: { args: string[]; timeoutMs: number; envOverrides?: NodeJS.ProcessEnv }[] = [];
   /** Artificial delay (ms) to simulate slow CLI calls. */
   public delayMs: number;
   /** If set, `send()` will reject with this error. */
@@ -37,8 +37,8 @@ class MockTransport implements ITransport {
     this.progressCallback = callback;
   }
 
-  async send(args: string[], timeoutMs: number): Promise<string> {
-    this.sendCalls.push({ args, timeoutMs });
+  async send(args: string[], timeoutMs: number, envOverrides?: NodeJS.ProcessEnv): Promise<string> {
+    this.sendCalls.push({ args, timeoutMs, envOverrides });
 
     if (this.errorToThrow) {
       throw this.errorToThrow;

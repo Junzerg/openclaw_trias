@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
-import { ConstitutionConfig, ConstitutionConfigSchema } from './models';
+import { ConstitutionConfig, ConstitutionConfigSchema, type ModelRoutingConfig } from './models';
 
 // Assuming the backend is run from `backend` folder, and the root is one level up.
 const __filename = fileURLToPath(import.meta.url);
@@ -80,4 +80,14 @@ export function loadSoul(role: string): string {
 export function clearConfigCache() {
   _cachedConstitution = null;
   _soulCache.clear();
+}
+
+/**
+ * Resolve the effective model identifier for a given agent role.
+ *
+ * Priority: overrides[role] > routing.default > undefined (adapter uses its own defaultModel)
+ */
+export function resolveModel(role: string, routing?: ModelRoutingConfig): string | undefined {
+  if (!routing) return undefined;
+  return routing.overrides?.[role] ?? routing.default;
 }
