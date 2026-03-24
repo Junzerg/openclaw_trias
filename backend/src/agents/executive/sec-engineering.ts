@@ -4,12 +4,100 @@ import { ExecutionTask, TaskResult } from '../../schemas/act';
 import { OpenClawAdapter } from '../../openclaw/adapter';
 import { MessageBus } from '../../bus/message-bus';
 
+/** Supported languages for code execution. */
+const SUPPORTED_LANGUAGES = ['python', 'javascript', 'bash'] as const;
+type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
+
 export class SecretaryOfEngineering extends BaseAgent {
   protected static _available_tools: string[] = ['CodeExecution', 'Python_Interpreter', 'GitHub'];
 
   constructor(adapter: OpenClawAdapter, bus?: MessageBus) {
     super('Sec. of Engineering', 'sec_engineering', Branch.EXECUTIVE, [Permission.EXECUTE], adapter, bus, true);
   }
+
+  // ── Phase 1: Code Generation ──────────────────────────────────────────────
+
+  /**
+   * Ask the LLM to generate executable code for the given task description.
+   * Returns `{ language, code }` — either parsed from the LLM JSON response
+   * or via the fallback strategy.
+   */
+  private async _generateCode(description: string): Promise<{ language: string; code: string }> {
+    const prompt = `你是一个精确的代码生成器。根据以下任务描述，生成可直接执行的代码。
+
+任务描述：
+"""
+${description}
+"""
+
+你必须返回一段合法 JSON（不要包含 Markdown 格式包裹）：
+{
+  "language": "python" | "javascript" | "bash",
+  "code": "<完整可执行代码>"
+}
+
+规则：
+1. 代码必须完整可执行（无 import 缺失、无语法错误）
+2. 默认使用 Python，除非任务明确要求其他语言
+3. 代码应在 30 秒内完成执行
+4. 不要使用需要用户交互的代码（如 input()）`;
+
+    // Attempt 1
+    const result = await this.callLLM(prompt);
+    const extracted = this._extractCodeFromLLM(result.content);
+
+    // If we got a valid JSON extraction (not a fallback), return immediately
+    if (extracted.valid) {
+      return extracted;
+    }
+
+    // Retry once: the first response wasn't valid JSON — ask LLM again
+    console.log(`[SecEngineering] Code generation JSON parse failed, retrying once...`);
+    try {
+      const retryResult = await this.callLLM(prompt);
+      const retryExtracted = this._extractCodeFromLLM(retryResult.content);
+      if (retryExtracted.valid) {
+        return retryExtracted;
+      }
+    } catch {
+      // Retry failed — fall through to use the original fallback
+    }
+
+    // Final fallback: use the original extraction (which is fallback to Python)
+    console.log(`[SecEngineering] Retry also failed, using fallback (entire output as Python code)`);
+    return extracted;
+  }
+
+  // ── JSON Extraction & Fallback ────────────────────────────────────────────
+
+  /**
+   * Extract `{ language, code }` from the LLM response text.
+   *
+   * Strategy:
+   * 1. Try to find a JSON object via regex and parse it.
+   * 2. Validate `code` field exists and `language` is in the whitelist.
+   * 3. If anything fails, fallback: treat the entire output as Python code.
+   */
+  public _extractCodeFromLLM(content: string): { language: string; code: string; valid: boolean } {
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.code) {
+          const lang: SupportedLanguage = (SUPPORTED_LANGUAGES as readonly string[]).includes(parsed.language)
+            ? (parsed.language as SupportedLanguage)
+            : 'python';
+          return { language: lang, code: parsed.code, valid: true };
+        }
+      }
+    } catch {
+      // JSON.parse failed — fall through to fallback
+    }
+    // Fallback: treat the entire LLM output as Python code
+    return { language: 'python', code: content, valid: false };
+  }
+
+  // ── Main Execution ────────────────────────────────────────────────────────
 
   public async executeTask(task: ExecutionTask): Promise<TaskResult> {
     this.requirePermission(Permission.EXECUTE);
@@ -27,24 +115,31 @@ export class SecretaryOfEngineering extends BaseAgent {
     }, undefined, task.task_id);
 
     try {
-      // Mock execution - placeholder for Phase 2 adapter.executeCode()
-      const output = `[Mock] ${this.role} 完成步骤 ${task.step.index}: ${task.step.description}`;
-      // emit success
+      // Phase 1: Code Generation
+      const { language, code } = await this._generateCode(task.step.description);
+
+      // Phase 2: Code Execution
+      const execResult = await this.adapter.executeCode(code, language, this.modelRef);
+
+      const success = execResult.exitCode === 0;
       this.emitEvent(EventAction.TOOL_CALL, {
         tool_name: task.step.required_skill,
         step_index: task.step.index,
-        status: 'success',
+        status: success ? 'success' : 'failed',
       }, undefined, task.task_id);
 
       return {
         task_id: task.task_id,
         step_index: task.step.index,
-        status: 'success',
-        output: output,
+        status: success ? 'success' : 'failed',
+        output: success
+          ? (execResult.stdout || '')
+          : (execResult.stderr || execResult.stdout || ''),
+        error: success ? undefined : (execResult.stderr || execResult.stdout || 'Unknown execution error'),
         tokens_consumed: task.step.estimated_tokens,
       };
     } catch (err: any) {
-      // emit failure
+      // Emit failure event
       this.emitEvent(EventAction.TOOL_CALL, {
         tool_name: task.step.required_skill,
         step_index: task.step.index,
@@ -52,6 +147,7 @@ export class SecretaryOfEngineering extends BaseAgent {
         error: err.message || String(err),
       }, undefined, task.task_id);
 
+      // Return structured failure — never block the Pipeline
       return {
         task_id: task.task_id,
         step_index: task.step.index,

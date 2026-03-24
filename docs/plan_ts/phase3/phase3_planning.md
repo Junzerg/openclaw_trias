@@ -74,8 +74,8 @@ model_routing:
 |------|---------|------------|------|------|
 | **[3.1 Adapter 异步化重构](task3.1_adapter_async.md)** ✅ | `adapter.ts` execSync→spawn + ITransport 抽象 + 进度回调 | ~250 行改动 | ⭐⭐⭐⭐ 高 | L0 基础 |
 | **[3.2 错误分类与重试基础设施](task3.2_error_retry.md)** ✅ | `errors.ts` + `retry.ts` 新建 | ~270 行新增 | ⭐⭐ 低 | L1 基础设施 |
-| **[3.3 模型路由与 Agent 配置](task3.3_model_routing.md)** | `config/` + `base.ts` + `constitution.yaml` | ~150 行 | ⭐⭐ 低 | L1 基础设施 |
-| **[3.4 SecEngineering 真实代码执行](task3.4_sec_engineering.md)** | `sec-engineering.ts` 重构 | ~200 行改动 | ⭐⭐⭐⭐ 高 | L2 执行层 |
+| **[3.3 模型路由与 Agent 配置](task3.3_model_routing.md)** ✅ | `config/` + `base.ts` + `constitution.yaml` | ~150 行 | ⭐⭐ 低 | L1 基础设施 |
+| **[3.4 SecEngineering 真实代码执行](task3.4_sec_engineering.md)** ✅ | `sec-engineering.ts` 重构 | ~200 行改动 | ⭐⭐⭐⭐ 高 | L2 执行层 |
 | **[3.5 SecState 搜索与浏览对接](task3.5_sec_state.md)** | `sec-state.ts` 重构 | ~120 行改动 | ⭐⭐⭐ 中 | L2 执行层 |
 | **[3.6 安全沙箱与执行约束](task3.6_sandbox.md)** | `sandbox.ts` 新建 + 集成 | ~150 行新增 | ⭐⭐⭐ 中 | L3 安全层 |
 | **[3.7 Pipeline 集成调试](task3.7_pipeline_integration.md)** | `government.ts` 调整 + 联调 | ~100 行改动 | ⭐⭐⭐ 中 | L4 集成层 |
@@ -304,7 +304,7 @@ const ModelRoutingConfigSchema = z.object({
 阶段 2: 代码执行 (adapter.executeCode)
   Input:  code + language
   Output: ExecResult { stdout, stderr, exitCode }
-  
+
 映射: ExecResult → TaskResult
   exitCode == 0 → status: 'success', output: stdout
   exitCode != 0 → status: 'failed', error: stderr

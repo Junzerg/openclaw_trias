@@ -133,10 +133,25 @@ public async executeTask(task: ExecutionTask): Promise<TaskResult> {
 
 ## 验收维度
 
-- [ ] 简单请愿 "写 hello world" → SecEngineering 真实生成 + 执行 → stdout 包含 "hello"
-- [ ] 执行结果正确映射为 `TaskResult.output`
-- [ ] 执行失败（如除零错误）→ `TaskResult.status = 'failed'` + 有意义的 `error`
-- [ ] LLM 返回畸形 JSON → 自动重试 → 仍失败则 fallback 为 Python 代码执行
-- [ ] Mock adapter 单测：验证调用链 `callLLM → extractCode → executeCode`
-- [ ] 所有现有测试通过（回归）
-- [ ] `npm run build` 零 TypeScript 报错
+- [x] 简单请愿 "写 hello world" → SecEngineering 真实生成 + 执行 → stdout 包含 "hello"
+- [x] 执行结果正确映射为 `TaskResult.output`（成功→stdout，失败→stderr 优先 fallback stdout）
+- [x] 执行失败（如除零错误）→ `TaskResult.status = 'failed'` + 有意义的 `error`
+- [x] LLM 返回畸形 JSON → 自动重试 1 次 → 仍失败则 fallback 为 Python 代码执行
+- [x] Mock adapter 单测：验证调用链 `callLLM → extractCode → executeCode`
+- [x] 所有现有测试通过（回归）
+- [x] `npm run build` 零 TypeScript 报错
+
+## 完成记录
+
+- **完成日期**：2026-03-24
+- **实际交付**：
+  - `sec-engineering.ts`：170 行（重构，含两阶段执行 + 重试 + JSON 提取 + fallback）
+  - `tests/sec-engineering.test.ts`：428 行（新增 23 个测试）
+  - `tests/executive.test.ts`：328 行（更新 mock 桩以支持两阶段流）
+- **测试总数**：375（原 352 + 新增 23）
+- **审查轮次**：3 轮深度审查，修复 5 个 Bug：
+  - Bug #1 (High): 缺少 withRetry JSON 解析重试（验收项 #4）
+  - Bug #2 (Low): 贪婪正则边界风险（已加测试覆盖）
+  - Bug #3 (Medium): `output` 失败时应优先展示 stderr
+  - Bug #4 (Low): `_isValidExtraction` 与 `_extractCodeFromLLM` 逻辑重复
+  - Bug #5 (Low): 重构时丢失 `_generateCode` 闭合花括号

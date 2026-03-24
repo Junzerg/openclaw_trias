@@ -10,6 +10,7 @@ describe('Executive Branch Task 1.6', () => {
 
   const mockAdapter = {
     callLLM: vi.fn(),
+    executeCode: vi.fn(),
   } as any;
 
   const mockBus = {
@@ -18,6 +19,19 @@ describe('Executive Branch Task 1.6', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default stubs for two-phase SecEng flow:
+    // Phase 1 (callLLM) returns code-generation JSON
+    mockAdapter.callLLM.mockResolvedValue({
+      content: '{"language":"python","code":"print(1)"}',
+      rawOutput: '',
+    });
+    // Phase 2 (executeCode) returns success
+    mockAdapter.executeCode.mockResolvedValue({
+      stdout: '1\n',
+      stderr: '',
+      exitCode: 0,
+      rawOutput: '',
+    });
   });
 
   describe('Kahn Topological Sort & Task Execution Pipeline', () => {
@@ -54,7 +68,7 @@ describe('Executive Branch Task 1.6', () => {
       const engine = new ExecutionEngine({});
       // testing private method via any
       const levels = (engine as any)._topologicalSort(complexSteps);
-      
+
       expect(levels.length).toBe(3);
       expect(levels[0].map((s: any) => s.index).sort()).toEqual([0, 1]);
       expect(levels[1].map((s: any) => s.index).sort()).toEqual([2, 3]);
@@ -98,7 +112,7 @@ describe('Executive Branch Task 1.6', () => {
       expect(report.overall_status).toBe('completed');
       expect(report.task_results.length).toBe(5);
       expect(report.total_tokens_consumed).toBe(60);
-      
+
       const engSuccesses = report.task_results.filter(r => r.status === 'success');
       expect(engSuccesses.length).toBe(5);
     });
@@ -106,7 +120,7 @@ describe('Executive Branch Task 1.6', () => {
     it('should propagate Failures to downstream tasks marking them as Skipped', async () => {
       const secEng = new SecretaryOfEngineering(mockAdapter, mockBus);
       const secState = new SecretaryOfState(mockAdapter, mockBus);
-      
+
       vi.spyOn(secEng, 'executeTask').mockImplementation(async (task) => {
         if (task.step.index === 0) {
           return {
@@ -158,7 +172,7 @@ describe('Executive Branch Task 1.6', () => {
       const report = await engine.executeAct(act);
 
       expect(report.overall_status).toBe('partial');
-      
+
       const r0 = report.task_results.find(r => r.step_index === 0);
       expect(r0!.status).toBe('failed');
 
@@ -185,7 +199,7 @@ describe('Executive Branch Task 1.6', () => {
 
       const act: Act = {
         act_id: 'act-111', title: 'A Good Act', summary: '', petition_origin: '',
-        total_estimated_tokens: 1000, 
+        total_estimated_tokens: 1000,
         steps: [
           { index: 0, description: '', required_skill: 'CodeExecution', tool_parameters: {}, estimated_tokens: 100, acceptance_criteria: '', dependencies: [] }
         ],
@@ -212,7 +226,7 @@ describe('Executive Branch Task 1.6', () => {
 
       const act: Act = {
         act_id: 'act-112', title: 'A Bad Act', summary: '', petition_origin: '',
-        total_estimated_tokens: 1000, 
+        total_estimated_tokens: 1000,
         steps: [
           { index: 0, description: '', required_skill: 'CodeExecution', tool_parameters: {}, estimated_tokens: 100, acceptance_criteria: '', dependencies: [] }
         ],
@@ -266,18 +280,33 @@ describe('Executive Branch Task 1.6', () => {
       );
     });
 
-    it('SecretaryOfEngineering should emit TOOL_CALL running and success', async () => {
+    it('SecretaryOfEngineering should emit TOOL_CALL running and success (two-phase)', async () => {
       const sec = new SecretaryOfEngineering(mockAdapter, mockBus);
       const emitSpy = vi.spyOn(sec, 'emitEvent');
 
+      // Phase 1: callLLM returns code-gen JSON
+      const codeGenJson = JSON.stringify({ language: 'python', code: "print('hello world')" });
+      mockAdapter.callLLM.mockResolvedValueOnce({
+        content: codeGenJson,
+        rawOutput: '',
+      });
+      // Phase 2: executeCode returns success
+      mockAdapter.executeCode.mockResolvedValueOnce({
+        stdout: 'hello world\n',
+        stderr: '',
+        exitCode: 0,
+        rawOutput: '',
+      });
+
       const task: any = {
         task_id: 'task-10', act_id: 'act-xx',
-        step: { index: 0, description: 'desc', required_skill: 'CodeExecution', tool_parameters: {}, estimated_tokens: 10, acceptance_criteria: '', dependencies: [] },
+        step: { index: 0, description: 'Write hello world', required_skill: 'CodeExecution', tool_parameters: {}, estimated_tokens: 10, acceptance_criteria: '', dependencies: [] },
         assigned_to: 'sec_engineering'
       };
 
       const res = await sec.executeTask(task);
       expect(res.status).toBe('success');
+      expect(res.output).toContain('hello world');
 
       expect(emitSpy).toHaveBeenCalledWith(
         EventAction.TOOL_CALL,
