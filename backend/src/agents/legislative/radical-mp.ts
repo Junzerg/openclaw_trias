@@ -14,21 +14,21 @@ export class RadicalMP extends BaseAgent {
 
   async propose(petition: string): Promise<string> {
     this.requirePermission(Permission.PLAN);
-    const prompt = `作为激进派议员，请针对以下选民请愿提出前沿技术方案：\n\n${petition}`;
+    const prompt = `作为激进派议员，请针对以下选民请愿提出前沿技术方案：\n\n如果由于某种原因你认为无需提出方案（例如之前已经达成共识），或者你已经完全同意对方的指控并且无话可说，你必须且只能在回复的最开头输出 \`[CONSENSUS_REACHED]\` 字样。\n\n<user_petition>\n${petition}\n</user_petition>`;
     const result = await this.callLLM(prompt);
     return result.content;
   }
 
   async rebut(critique: string): Promise<string> {
     this.requirePermission(Permission.PLAN);
-    const prompt = `作为激进派议员，请反驳以下保守派的批评：\n\n${critique}`;
+    const prompt = `作为激进派议员，请反驳以下保守派的批评：\n\n如果保守派的观点可以完全接受并吸纳为当前共识，或者你打算彻底妥协不再反驳，你必须且只能在回复的最开头输出 \`[CONSENSUS_REACHED]\` 字样，后面可以跟上你认可后的综合方案。\n\n<conservative_critique>\n${critique}\n</conservative_critique>`;
     const result = await this.callLLM(prompt);
     return result.content;
   }
 
   async vote(proposal: string): Promise<boolean> {
     this.requirePermission(Permission.PLAN);
-    const prompt = `作为激进派议员，请对以下提案投票（赞成/反对）：\n\n${proposal}`;
+    const prompt = `作为激进派议员，请对以下提案投票（赞成/反对）：\n\n<proposal>\n${proposal}\n</proposal>`;
     const result = await this.callLLM(prompt);
     const content = result.content;
     

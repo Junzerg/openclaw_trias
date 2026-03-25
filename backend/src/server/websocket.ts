@@ -8,7 +8,7 @@
  */
 
 import type { WebSocket } from 'ws';
-import type { AppState, IConnectionManager } from './app';
+import { TaskStatus, type AppState, type IConnectionManager } from './app';
 import { PetitionRequestSchema } from './schemas'; // 引入 Schema 用于防绕过验证
 import { runPetition } from './pipeline-bridge';
 
@@ -129,18 +129,55 @@ export function handleWebSocketConnection(
           return;
         }
 
-        // 创建任务记录
-        await appState.taskStore.createTask(taskId, prompt);
-        
-        ws.send(JSON.stringify({
-          action: 'task_started',
-          task_id: taskId
-        }));
+        // 防雷 11 (Phase 9): TOCTOU 并发注入保护
+        // 如果两个恶意连接在同一毫秒内发送相同 task_id，它们会同时通过上面的现有检查，
+        // 从而在此刻同时触碰 DB。必须用 try-catch 拦截 UNIQUE constraint failed。
+        try {
+          await appState.taskStore.createTask(taskId, prompt);
+        } catch (err: unknown) {
+          if (err instanceof Error && err.message.includes('UNIQUE constraint failed')) {
+            ws.send(JSON.stringify({
+              action: 'error',
+              data: { message: `Task ${taskId} was just created by another concurrent request.` },
+              task_id: taskId,
+            }));
+            return;
+          }
+          throw err;
+        }
 
-        // 提交 Pipeline 到队列执行
-        await appState.taskQueue.submit(taskId, async () => {
-          await runPetition(taskId, prompt, appState);
-        });
+        // 防雷 12 (Phase 9): 防止 UI 永久挂起死锁
+        // 必须先提交队列成功，然后再给前端广播 task_started。
+        // 否则如果队列抛出异常（如队列阻塞、规则拒绝），前端拿到 started 后会永久假死 (无限 spinning)。
+        try {
+          await appState.taskQueue.submit(taskId, async () => {
+            await runPetition(taskId, prompt, appState);
+          });
+          
+          ws.send(JSON.stringify({
+            action: 'task_started',
+            task_id: taskId
+          }));
+        } catch (err: unknown) {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          ws.send(JSON.stringify({
+            action: 'error',
+            data: { message: errorMessage || 'Failed to submit task to queue.' },
+            task_id: taskId,
+          }));
+          
+          // 如果写入数据库成功但队列拒绝，任务在 DB 里会永久卡在 PENDING。
+          // 必须主动将其标记为 FAILED 防止悬空态。
+          try {
+            await appState.taskStore.updateTask(taskId, {
+              status: TaskStatus.FAILED,
+              result: errorMessage || 'Submit failed',
+            });
+          } catch (dbErr) {
+            console.error('[WS] Failed to cleanup pending task after queue rejection:', dbErr);
+          }
+          return;
+        }
         return;
       }
 

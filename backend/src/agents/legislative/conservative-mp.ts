@@ -14,21 +14,21 @@ export class ConservativeMP extends BaseAgent {
 
   async critique(proposal: string): Promise<string> {
     this.requirePermission(Permission.PLAN);
-    const prompt = `作为保守派议员，请对以下提案进行安全性和稳定性审查：\n\n${proposal}`;
+    const prompt = `作为保守派议员，请对以下提案进行安全性和稳定性审查：\n\n如果提案非常完美没有任何安全隐患，你认为无需补充也不要发表废话，你必须且只能在回复的最开头输出 \`[CONSENSUS_REACHED]\` 字样。\n\n<proposal>\n${proposal}\n</proposal>`;
     const result = await this.callLLM(prompt);
     return result.content;
   }
 
   async rebut(counterArgument: string): Promise<string> {
     this.requirePermission(Permission.PLAN);
-    const prompt = `作为保守派议员，请针对以下反驳进行二次论证：\n\n${counterArgument}`;
+    const prompt = `作为保守派议员，请针对以下反驳进行二次论证：\n\n如果对方的反驳已经彻底消除了你的安全顾虑，让你觉得再无必要抬杠，或者是你也打算退让达成共识了，你必须且只能在回复的最开头输出 \`[CONSENSUS_REACHED]\` 字样，可以附带几句总结意见。\n\n<radical_rebuttal>\n${counterArgument}\n</radical_rebuttal>`;
     const result = await this.callLLM(prompt);
     return result.content;
   }
 
   async vote(proposal: string): Promise<boolean> {
     this.requirePermission(Permission.PLAN);
-    const prompt = `作为保守派议员，请对以下提案投票（赞成/反对）：\n\n${proposal}`;
+    const prompt = `作为保守派议员，请对以下提案投票（赞成/反对）：\n\n<proposal>\n${proposal}\n</proposal>`;
     const result = await this.callLLM(prompt);
     const content = result.content;
     

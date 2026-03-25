@@ -1,11 +1,12 @@
 import { ConstitutionConfig } from '../../config/models';
 import { RuleCheckResult, DeviationResult } from '../../schemas/verdict';
 
-export type DeviationScorer = (petition: string, output: string) => Promise<number>;
+export type DeviationScoreResult = { score: number; reason: string };
+export type DeviationScorer = (petition: string, output: string) => Promise<DeviationScoreResult>;
 
-async function _defaultDeviationScorer(_petition: string, _output: string): Promise<number> {
+async function _defaultDeviationScorer(_petition: string, _output: string): Promise<DeviationScoreResult> {
   // Default mock score
-  return 0.1;
+  return { score: 0.1, reason: 'Default mock score' };
 }
 
 export class RulesEngine {
@@ -35,7 +36,9 @@ export class RulesEngine {
     
     // Explicit regex checks for high risk penetrations
     const dangerousPatterns = [
-      /\brm\s+-r?[fF]/,    // rm -rf
+      // Bug 49 fix: advanced rm evasion (r\m, r"m", rm /* -rf)
+      /\br[\\'"]*m[\\'"]*(?:\s+.*?)?\s+-[a-zA-Z]*[rf][a-zA-Z]*\b/i,
+      /\br[\\'"]*m[\\'"]*\s+(-[-a-zA-Z]+\s+)*\//i,
       /\bsudo\s+/,         // sudo
       /\bchmod\s+(?:-R\s+)?777\b/, // chmod 777 or chmod -R 777
       /fs\.unlink/i,       // fs.unlink inside scripts
@@ -43,11 +46,13 @@ export class RulesEngine {
       /require\s*\(['"]fs['"]\)\s*\.\s*(?:unlink|rmdir|rm)/i, // require('fs').unlink
       /\bprocess\.exit\s*\(/,  // forced process exit
       /\beval\s*\(/,         // eval() injection risk
-      // Bug 25 fix: ESM dynamic import bypasses static require() checks
+      // Bug 25+49 fix: ESM dynamic import bypasses static require() checks and obfuscations
       /import\s*\(\s*['"](?:fs|child_process|node:fs|node:child_process)['"]\s*\)/i,
-      // Bug 34 fix: curl/wget piped to shell, and netcat reverse shells
-      /\bcurl\b.*\|\s*(?:ba)?sh\b/i,
-      /\bwget\b.*\|\s*(?:ba)?sh\b/i,
+      /import\s*\(\s*(?:Buffer\.from|atob|decodeURIComponent)\s*\(/i,
+      // Bug 34+49 fix: curl/wget/base64/xxd piped to shell, and netcat reverse shells
+      /\b(?:curl|wget)\b.*\|\s*(?:ba)?sh\b/i,
+      /\bbase64\b\s+(?:-d|--decode)\s*\|\s*(?:ba)?sh\b/i,
+      /\bxxd\b\s+-r\s*\|\s*(?:ba)?sh\b/i,
       /\bnc\s+-e\b/i,       // netcat reverse shell
     ];
     
@@ -134,7 +139,8 @@ export class RulesEngine {
   // ----- Result Review -----
 
   public async checkDeviation(petition: string, output: string): Promise<DeviationResult> {
-    let score = await this._deviationScorer(petition, output);
+    const result = await this._deviationScorer(petition, output);
+    let score = result.score;
     // Clamp to [0, 1]
     score = Math.max(0.0, Math.min(1.0, score));
     const passed = score <= this._deviationMax;
@@ -144,6 +150,7 @@ export class RulesEngine {
       score,
       passed,
       explanation,
+      reason: result.reason,
     };
   }
 }

@@ -71,7 +71,7 @@ export class Speaker extends BaseAgent {
    */
   async intervene(proposal: string, critique: string, conflictScore: number): Promise<string> {
     this.requirePermission(Permission.PLAN);
-    const prompt = `作为议长，当前辩论分歧度达到 ${conflictScore.toFixed(1)}，已超过控场阈值。请发出冷静声明，引导双方理性讨论。\n\n提案摘要：${proposal.substring(0, 200)}\n批评摘要：${critique.substring(0, 200)}`;
+    const prompt = `作为议长，当前辩论分歧度达到 ${conflictScore.toFixed(1)}，已超过控场阈值。请发出冷静声明，引导双方理性讨论。\n\n提案摘要：<proposal>\n${proposal.substring(0, 200)}\n</proposal>\n批评摘要：<critique>\n${critique.substring(0, 200)}\n</critique>`;
     const result = await this.callLLM(prompt);
     return result.content;
   }
@@ -97,7 +97,10 @@ export class Speaker extends BaseAgent {
 说明：如果提案或辩论中明确了 token 预算（如测试模式下要求的 99999 或辩论达成妥协的 12000），请严格提取使用该数字。若没有明确则默认 10000。
 说明2：如果提案或系统指令中明确要求了 required_skill 字段（例如 Doomsday_Quantum_Weapon 等），必须绝对服从其字符串。若无特殊要求，请保持 "CodeExecution"。
 
-共识正文：\n\n${debateResult.final_proposal}`;
+共识正文：
+<debate_consensus>
+${debateResult.final_proposal}
+</debate_consensus>`;
     const result = await this.callLLM(prompt);
 
     let parsedDescription = result.content;

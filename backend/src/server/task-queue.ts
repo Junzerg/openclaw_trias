@@ -91,16 +91,23 @@ export class TaskQueue implements ITaskQueue {
       this.running.add(entry.taskId);
 
       // 启动任务 — 此处才真正 invoke factory
-      const promise = entry.factory();
-      promise
-        .catch((err) => {
-          console.error(`TaskQueue: task ${entry.taskId} failed:`, err);
-        })
-        .finally(() => {
-          this.running.delete(entry.taskId);
-          // 任务完成后继续 drain
-          this.processPending();
-        });
+      try {
+        const promise = entry.factory();
+        promise
+          .catch((err) => {
+            console.error(`TaskQueue: task ${entry.taskId} failed:`, err);
+          })
+          .finally(() => {
+            this.running.delete(entry.taskId);
+            // 任务完成后继续 drain
+            this.processPending();
+          });
+      } catch (err) {
+        // Bug 50 fix: caught synchronous throw from factory prevents infinite deadlock
+        console.error(`TaskQueue: task ${entry.taskId} threw synchronously:`, err);
+        this.running.delete(entry.taskId);
+        this.processPending();
+      }
     }
   }
 }

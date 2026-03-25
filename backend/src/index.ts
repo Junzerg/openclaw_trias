@@ -36,16 +36,37 @@ async function main() {
   const server = startServerWithWebSocket(app, state.wsManager, state, PORT);
 
   // 5. 优雅关闭钩子
+  let isShuttingDown = false;
   const shutdown = async () => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
     console.log('\n[Server] 收到关闭信号，准备清理资源...');
 
-    // 关闭 HTTP 接收新请求
-    server.close(() => {
-      console.log('[Server] HTTP/WS 端口已停止监听');
+    // 关闭 HTTP 接收新请求并等待现有活跃请求处理完毕
+    const closePromise = new Promise<void>((resolve, reject) => {
+      server.close((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
     });
 
-    // 优雅关闭 Government 和数据库
+    // 主动断开所有的 WebSocket 连接（防止长连接导致 server.close 永远卡住）
+    state.wsManager.closeAll();
+    console.log('[Server] 所有 WebSocket 长连接已断开');
+
+    // 优雅关闭 Government Pipeline 和数据库
     await shutdownLifecycle();
+
+    try {
+      // 容错: 给 HTTP 残留请求 5 秒时间进行完成，如果超时强行杀进程
+      await Promise.race([
+        closePromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Shutdown timeout')), 5000))
+      ]);
+      console.log('[Server] HTTP/WS 端口已停止监听，所有资源安全释放');
+    } catch (e) {
+      console.error('[Server] 强制关闭期间发生异常或超时:', e);
+    }
 
     process.exit(0);
   };

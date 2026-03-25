@@ -231,8 +231,15 @@ export class OpenClawAdapter {
       if (trimmed.startsWith('🦞')) return false;
       // Skip timestamp log lines (e.g. "20:30:42 [plugins] ...")
       if (/^\d{2}:\d{2}:\d{2}\s+\[/.test(trimmed)) return false;
-      // Skip [module] log lines that may leak from stderr (e.g. "[plugins] ...")
-      if (/^\[[\w_]+\]/.test(trimmed)) return false;
+      // Skip [module] log lines that may leak from stderr (e.g. "[plugins] ...", "[core] ...")
+      // 必须是全小写字母且带空格，避免误伤大模型输出的 [SIGN] / [CONSENSUS_REACHED] 等标签
+      if (/^\[[a-z_]+\]\s/.test(trimmed)) {
+        // Bug 5 fix: KEEP tool execution results! That's the actual payload!
+        if (trimmed.includes('Result:') || trimmed.includes('args:')) {
+          return true;
+        }
+        return false;
+      }
       // Skip the tagline lines
       if (trimmed.startsWith('Automation with') || trimmed.startsWith('Runs on a')) return false;
       if (trimmed.startsWith('No $') || trimmed.startsWith('Alexa,')) return false;

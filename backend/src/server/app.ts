@@ -56,6 +56,13 @@ export interface ITaskStore {
 
   // ─── 写入方法（Task 2.4 桥接使用）─────────────────────────────
   storeEvent(taskId: string, sourceAgent: string, action: string, emotion: string, intensity: number, payload: string): Promise<void>;
+  storeEventBatch?(
+    taskId: string,
+    eventData: { sourceAgent: string, action: string, emotion: string, intensity: number, payloadStr: string },
+    stateChange?: string,
+    actJson?: string,
+    verdict?: { constitutional: boolean, ruling: string, evidence: string }
+  ): Promise<void>;
   storeAct(taskId: string, actJson: string): Promise<void>;
   storeVerdict(taskId: string, constitutional: boolean, ruling: string, evidence: string): Promise<void>;
 }
@@ -71,6 +78,7 @@ export interface IConnectionManager {
   disconnect(taskId: string, ws: import('ws').WebSocket): void;
   broadcast(taskId: string, payload: Record<string, unknown>): Promise<void>;
   getConnectionCount(taskId: string): number;
+  closeAll(): void;
 }
 
 // ─── AppState ──────────────────────────────────────────────────
@@ -110,6 +118,12 @@ export function createApp(state: AppState): Express {
   // 注册 REST 路由
   const router = createRouter();
   app.use(router);
+
+  // 兜底 404：如果没有任何路由匹配，必须返回 JSON 而不是 Express 默认的 HTML
+  // 防止前端 JSON.parse() 遇到 `<!DOCTYPE html>` 时抛出异常白屏
+  app.use((_req: Request, res: Response) => {
+    res.status(404).json({ error: 'Not Found', detail: 'Endpoint does not exist' });
+  });
 
   // 全局错误处理中间件（Express 5 原生捕获 async rejection，此为兜底 + 格式化）
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

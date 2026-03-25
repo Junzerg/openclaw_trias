@@ -139,6 +139,22 @@ export class DebateEngine {
         }
       }
 
+      // Bug 1 + 2 fix: 结构化判定提前终止（硬短路）
+      // 当任一方输出 [CONSENSUS_REACHED] 标记时，强制达成共识退出。
+      // 为保证 `final_proposal` 具有真正的代码意义，保留上一个具有实际内容的提案 currentProposal，不再将其覆盖为毫无意义的共识短语。
+      if (critiqueText.includes('[CONSENSUS_REACHED]')) {
+        rounds.push({
+          round_number: roundNum,
+          proposal: currentProposal,
+          critique: critiqueText,
+          rebuttal: '',
+          conflict_score: 0,
+          speaker_intervention: intervention
+        });
+        finalScore = 0;
+        break; // break early immediately
+      }
+
       rounds.push({
         round_number: roundNum,
         proposal: currentProposal,
@@ -162,6 +178,15 @@ export class DebateEngine {
           round_number: roundNum, 
           conflict_score: score 
         }, undefined, taskId);
+        
+        // 如果激进派在反驳中举白旗，也硬退出，不覆盖 currentProposal
+        if (lastRebuttal.includes('[CONSENSUS_REACHED]')) {
+           rounds[rounds.length - 1].rebuttal = lastRebuttal;
+           rounds[rounds.length - 1].conflict_score = 0;
+           finalScore = 0;
+           break;
+        }
+        
         currentProposal = lastRebuttal;
       }
     }

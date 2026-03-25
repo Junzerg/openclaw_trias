@@ -20,6 +20,7 @@ export const DeviationResultSchema = z.object({
   score: z.number().min(0.0).max(1.0).describe('偏离度评分 0~1'),
   passed: z.boolean().describe('score <= max_score 时为 true'),
   explanation: z.string().describe('评估说明'),
+  reason: z.string().optional().describe('LLM 生成的详细偏离原因/摘要'),
 });
 export type DeviationResult = z.infer<typeof DeviationResultSchema>;
 

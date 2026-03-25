@@ -23,11 +23,14 @@ const DEFAULT_MAX_OUTPUT_BYTES = 50 * 1024;
 
 /** Patterns that indicate clearly destructive system commands. */
 const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
-  // rm: catch short flags (-rf, -r, -f, etc.) and long flags (--recursive, --force)
-  // The pattern matches: rm [any flags] /path
-  { pattern: /rm\s+(-[-a-zA-Z]+\s+)*\//, label: 'rm -rf /' },
+  // rm: catch evasion variants like r\m -rf, r"m" -rf, rm /* -rf
+  { pattern: /\br[\\'"]*m[\\'"]*(?:\s+.*?)?\s+-[a-zA-Z]*[rf][a-zA-Z]*\b/i, label: 'rm -rf (evasion)' },
+  { pattern: /\br[\\'"]*m[\\'"]*\s+(-[-a-zA-Z]+\s+)*\//i, label: 'rm -rf / (evasion)' },
   { pattern: /mkfs\b/, label: 'mkfs (格式化磁盘)' },
   { pattern: /dd\s+if=/, label: 'dd (磁盘写入)' },
+  // decoder to shell exploits
+  { pattern: /\bbase64\b\s+(?:-d|--decode)\s*\|\s*(?:ba)?sh\b/i, label: 'base64 -d | sh' },
+  { pattern: /\bxxd\b\s+-r\s*\|\s*(?:ba)?sh\b/i, label: 'xxd -r | sh' },
   // fork bomb: allow optional whitespace before & (both ":|:&" and ":|: &" are valid bash)
   { pattern: /:\(\)\{\s*:\|:\s*&\s*\};:/, label: 'fork bomb' },
   { pattern: />\s*\/dev\/sd[a-z]/, label: '直写磁盘设备' },
@@ -83,12 +86,21 @@ export function validateCode(code: string, _language: string): ValidationResult 
 export function truncateOutput(output: string, maxBytes: number = DEFAULT_MAX_OUTPUT_BYTES): string {
   // Guard: treat negative or zero maxBytes as "truncate everything"
   const effectiveMax = Math.max(0, maxBytes);
-  if (Buffer.byteLength(output, 'utf8') <= effectiveMax) {
-    return output;
+  // Pre-slice strings to avoid OOM crashes on massive outputs > 100MB
+  // A UTF-16 surrogate pair takes 2 JS length units max per 4 bytes, so effectiveMax * 2 is a safe upper bound
+  // +100 as padding for safe measure
+  const safeStr = output.length > effectiveMax * 2 + 100 
+    ? output.substring(0, effectiveMax * 2 + 100) 
+    : output;
+    
+  if (Buffer.byteLength(safeStr, 'utf8') <= effectiveMax) {
+    // If output was naturally shorter than maxBytes, return original (or pre-sliced if it somehow was just emojis)
+    if (output.length === safeStr.length) return output;
   }
+  
   // Buffer.toString('utf8') replaces incomplete trailing byte sequences with
   // U+FFFD (replacement character). Strip those to guarantee clean output.
-  const raw = Buffer.from(output, 'utf8').subarray(0, effectiveMax).toString('utf8');
+  const raw = Buffer.from(safeStr, 'utf8').subarray(0, effectiveMax).toString('utf8');
   const truncated = raw.replace(/\uFFFD+$/, '');
   return truncated + '\n\n[OUTPUT TRUNCATED — exceeded 50KB limit]';
 }

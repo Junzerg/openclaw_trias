@@ -289,7 +289,8 @@ describe('SecretaryOfEngineering — Two-Phase Execution (Task 3.4)', () => {
       const result = await sec.executeTask(makeTask());
 
       expect(result.status).toBe('success');
-      expect(result.output).toBe('');
+      expect(result.output).toContain('[Generated python Code]:\npass');
+      expect(result.output.endsWith('[Execution Output]:\n')).toBe(true);
       expect(result.error).toBeUndefined();
     });
   });
@@ -352,7 +353,7 @@ describe('SecretaryOfEngineering — Two-Phase Execution (Task 3.4)', () => {
         stdout: '1\n', stderr: '', exitCode: 0, rawOutput: '',
       });
 
-      await sec.executeTask(makeTask({ task_id: 'task-ev-1' }));
+      await sec.executeTask(makeTask({ task_id: 'task-ev-1', act_id: 'task-ev-1' }));
 
       expect(emitSpy).toHaveBeenCalledTimes(2);
       expect(emitSpy).toHaveBeenNthCalledWith(1,
@@ -380,7 +381,7 @@ describe('SecretaryOfEngineering — Two-Phase Execution (Task 3.4)', () => {
         stdout: '', stderr: 'error', exitCode: 1, rawOutput: '',
       });
 
-      await sec.executeTask(makeTask({ task_id: 'task-ev-2' }));
+      await sec.executeTask(makeTask({ task_id: 'task-ev-2', act_id: 'task-ev-2' }));
 
       expect(emitSpy).toHaveBeenCalledTimes(2);
       expect(emitSpy).toHaveBeenNthCalledWith(2,
@@ -396,7 +397,7 @@ describe('SecretaryOfEngineering — Two-Phase Execution (Task 3.4)', () => {
 
       mockAdapter.callLLM.mockRejectedValueOnce(new Error('boom'));
 
-      await sec.executeTask(makeTask({ task_id: 'task-ev-3' }));
+      await sec.executeTask(makeTask({ task_id: 'task-ev-3', act_id: 'task-ev-3' }));
 
       expect(emitSpy).toHaveBeenCalledTimes(2);
       expect(emitSpy).toHaveBeenNthCalledWith(1,

@@ -216,7 +216,7 @@ describe('Phase 3 Deep Audit — Round 2', () => {
       const capturedOutputs: string[] = [];
       const mockScorer: DeviationScorer = async (_petition: string, output: string) => {
         capturedOutputs.push(output);
-        return 0.1; // Low deviation — would pass
+        return { score: 0.1, reason: 'mock reason' } as any; // Low deviation — would pass
       };
 
       const constitution = makeConstitution();
@@ -253,7 +253,7 @@ describe('Phase 3 Deep Audit — Round 2', () => {
       const capturedOutputs: string[] = [];
       const mockScorer: DeviationScorer = async (_petition: string, output: string) => {
         capturedOutputs.push(output);
-        return 0.1;
+        return { score: 0.1, reason: 'mock reason' } as any;
       };
 
       const constitution = makeConstitution();
@@ -302,7 +302,7 @@ describe('Phase 3 Deep Audit — Round 2', () => {
 
   describe('Bug 6: Failed ExecutionReport goes to ChiefJustice', () => {
     it('FIXED: should produce unconstitutional verdict when all tasks failed', async () => {
-      const mockScorer: DeviationScorer = async () => 0.1; // Low deviation = "constitutional"
+      const mockScorer: DeviationScorer = async () => ({ score: 0.1, reason: 'mock reason' } as any); // Low deviation = "constitutional"
 
       const mockTransport = new MockTransport([]);
       const adapter = new OpenClawAdapter({}, mockTransport);

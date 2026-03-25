@@ -159,7 +159,7 @@ export class CyberGovernment {
       console.log(`Bill ${billId} 回到 DRAFTING，重试第 ${attempt} 次`);
     }
 
-    return `法案 ${billId} 在 ${maxRetries} 次重试后仍未通过。当前状态: ${lifecycle.current_state}`;
+    return `法案 ${billId} 在 ${maxRetries} 次重试后仍未通过。系统已拦截并终止该危险案卷。`;
   }
 
   private async _runPipeline(

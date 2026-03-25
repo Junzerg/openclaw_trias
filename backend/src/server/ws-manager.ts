@@ -106,4 +106,18 @@ export class ConnectionManager implements IConnectionManager {
   getConnectionCount(taskId: string): number {
     return this._connections.get(taskId)?.size ?? 0;
   }
+
+  /**
+   * 优雅关闭所有活跃的 WebSocket 连接。
+   */
+  closeAll(): void {
+    for (const conns of this._connections.values()) {
+      for (const ws of conns) {
+        if (ws.readyState === ws.OPEN) {
+          ws.close(1012, 'Service Restart');
+        }
+      }
+    }
+    this._connections.clear();
+  }
 }

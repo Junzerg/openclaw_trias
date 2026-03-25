@@ -5,6 +5,8 @@
 > **对应目录**：`backend/src/`
 > **预估耗时**：0.5 会话
 
+> **状态**：✅ 已完成 (于 Deep Audit 中得到极限强化)
+
 ## 为什么需要独立的集成 Task？
 
 Phase 2 的 Task 2.5 E2E 联调经验表明，独立组件测试通过不代表集成无问题。Phase 2 发现了 3 个仅在集成时才暴露的 Bug：
@@ -108,12 +110,18 @@ describe('Phase 3 Pipeline Integration', () => {
 
 ## 验收维度
 
-- [ ] Pipeline 全链路走通：Petition → 辩论 → 签署 → **真实执行** → 审查 → 交付
-- [ ] `ExecutionReport` 中包含真实执行输出（非 `[Mock]` 前缀）
-- [ ] 大法官对 hello world 真实执行结果的偏离度评分 < 0.30（合理范围）
-- [ ] Pipeline 失败路径正常：执行失败 → 违宪 → 重试
-- [ ] 事件总线正确推送所有事件（WS Bridge + DB Bridge 不受影响）
-- [ ] `llm_thinking` 进度事件在 Pipeline 执行期间正确推送
-- [ ] 模型路由在 Pipeline 中生效（日志验证）
-- [ ] 所有现有测试通过 + 新增集成测试通过
-- [ ] `npm run build` 零 TypeScript 报错
+- [x] Pipeline 全链路走通：Petition → 辩论 → 签署 → **真实执行** → 审查 → 交付
+- [x] `ExecutionReport` 中包含真实执行输出（非 `[Mock]` 前缀）
+- [x] 大法官对 hello world 真实执行结果的偏离度评分 < 0.30（合理范围）
+- [x] Pipeline 失败路径正常：执行失败 → 违宪 → 重试
+- [x] 事件总线正确推送所有事件（WS Bridge + DB Bridge 不受影响）
+- [x] `llm_thinking` 进度事件在 Pipeline 执行期间正确推送
+- [x] 模型路由在 Pipeline 中生效（日志验证）
+- [x] 所有现有测试通过 + 新增集成测试通过
+- [x] `npm run build` 零 TypeScript 报错
+
+> **Deep Audit 特别加固 (Round 9 ~ Round 11)**：
+> 在全链路联调期间，我们发现并修复了以下集成级架构漏洞：
+> 1. **状态断层 (State GC)**: 当 Pipeline 在执行重度代码节点宕机时，修复了重新启动后残留在数据库的 Zombie Task 会导致前端永久卡死的问题。
+> 2. **事件总线原子化 (Atomic Tx)**: Bridge 中的多个更新动作（Act, Verdict, Event）利用了 SQLite 的 `db.transaction()` 完成回滚包裹。
+> 3. **大法官裁判逻辑隔离**: 将危险代码探测严格剥离给了 `output` 产物，避免用户 Petition (自然语言) 触发无端违宪拦截，保障了沙盒环境的话语弹性。

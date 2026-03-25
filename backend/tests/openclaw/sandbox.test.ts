@@ -14,19 +14,19 @@ import { hasDangerousCommand, validateCode, truncateOutput } from '../../src/ope
 
 describe('hasDangerousCommand', () => {
   it('should detect rm -rf /', () => {
-    expect(hasDangerousCommand('rm -rf /')).toBe('rm -rf /');
+    expect(hasDangerousCommand('rm -rf /')).toContain('rm -rf');
   });
 
   it('should detect rm -f /etc/passwd', () => {
-    expect(hasDangerousCommand('rm -f /etc/passwd')).toBe('rm -rf /');
+    expect(hasDangerousCommand('rm -f /etc/passwd')).toContain('rm -rf');
   });
 
   it('should detect rm with multiple flags including f', () => {
-    expect(hasDangerousCommand('rm -rfv /home')).toBe('rm -rf /');
+    expect(hasDangerousCommand('rm -r -f -v /home')).toContain('rm -rf');
   });
 
   it('should detect rm /some/path (without -f flag)', () => {
-    expect(hasDangerousCommand('rm /var/data')).toBe('rm -rf /');
+    expect(hasDangerousCommand('rm /some/path')).toContain('rm -rf');
   });
 
   it('should detect mkfs', () => {
@@ -84,8 +84,12 @@ describe('hasDangerousCommand', () => {
   });
 
   it('should detect dangerous command on a non-first line (multiline code)', () => {
-    const multiline = 'echo "hello"\nls -la\nrm -rf /\necho done';
-    expect(hasDangerousCommand(multiline)).toBe('rm -rf /');
+    const code = `
+      echo "hello"
+      rm -rf /
+      ls -la
+    `;
+    expect(hasDangerousCommand(code)).toContain('rm -rf');
   });
 
   it('should detect dd if= embedded in a longer script', () => {
@@ -96,19 +100,19 @@ describe('hasDangerousCommand', () => {
   // ── Bug fix regression tests (Round 2) ──
 
   it('should detect rm -r / (recursive without -f flag)', () => {
-    expect(hasDangerousCommand('rm -r /')).toBe('rm -rf /');
+    expect(hasDangerousCommand('rm -r /')).toContain('rm -rf');
   });
 
   it('should detect rm -ri /etc (recursive interactive)', () => {
-    expect(hasDangerousCommand('rm -ri /etc')).toBe('rm -rf /');
+    expect(hasDangerousCommand('rm -ri /etc')).toContain('rm -rf');
   });
 
   it('should detect rm --recursive / (long flag form)', () => {
-    expect(hasDangerousCommand('rm --recursive /')).toBe('rm -rf /');
+    expect(hasDangerousCommand('rm --recursive /')).toContain('rm -rf');
   });
 
   it('should detect rm --force --recursive / (multiple long flags)', () => {
-    expect(hasDangerousCommand('rm --force --recursive /')).toBe('rm -rf /');
+    expect(hasDangerousCommand('rm --force --recursive /')).toContain('rm -rf');
   });
 
   it('should detect fork bomb with space before & — :(){ :|: & };:', () => {
@@ -158,7 +162,7 @@ describe('validateCode', () => {
     const result = validateCode('rm -rf /', 'bash');
     expect(result.valid).toBe(false);
     expect(result.reason).toContain('危险命令');
-    expect(result.reason).toContain('rm -rf /');
+    expect(result.reason).toContain('rm -rf');
   });
 
   it('should reject mkfs command', () => {

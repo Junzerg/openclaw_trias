@@ -236,7 +236,7 @@ describe('createDbBridge', () => {
     expect(args[2]).toBe('propose');        // action
     expect(args[3]).toBe('passionate');     // emotion
     expect(args[4]).toBe(0.7);             // intensity
-    expect(JSON.parse(args[5])).toEqual({ statement: 'Test proposal' }); // payload
+    expect(JSON.parse(args[5])).toEqual({ payload: { statement: 'Test proposal' } }); // extended payload
   });
 
   it('should skip events without task_id', async () => {
@@ -384,7 +384,7 @@ describe('runPetition', () => {
 
     // 第二次：FAILED
     expect(calls[1][1].status).toBe(TaskStatus.FAILED);
-    expect(calls[1][1].result).toBe('LLM timeout');
+    expect(calls[1][1].result).toContain('LLM timeout');
   });
 
   it('should not throw even when updateTask to FAILED also fails', async () => {

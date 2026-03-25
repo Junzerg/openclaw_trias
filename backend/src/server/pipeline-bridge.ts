@@ -114,39 +114,56 @@ export function createDbBridge(taskStore: ITaskStore): Handler {
     if (!event.task_id) return;
 
     try {
-      // 1. 存储事件到 events 表
-      const payloadStr = JSON.stringify(event.payload ?? {});
-      await taskStore.storeEvent(
-        event.task_id,
-        event.source_agent ?? 'unknown',
-        typeof event.action === 'string' ? event.action : String(event.action),
-        typeof event.emotion === 'string' ? event.emotion : 'neutral',
-        typeof event.intensity === 'number' ? event.intensity : 0.5,
-        payloadStr,
-      );
+      // Bug 56 fix: 确保将 event 中除了基础必填字段之外的所有扩展字段和 payload 统统序列化保存
+      const { action: _a, source_agent: _sa, emotion: _e, intensity: _i, timestamp: _t, task_id: _ti, target_agent: _ta, ...extendedPayload } = event as Record<string, unknown>;
+      const payloadStr = JSON.stringify(extendedPayload ?? {});
+      const eventData = {
+        sourceAgent: event.source_agent ?? 'unknown',
+        action: typeof event.action === 'string' ? event.action : String(event.action),
+        emotion: typeof event.emotion === 'string' ? event.emotion : 'neutral',
+        intensity: typeof event.intensity === 'number' ? event.intensity : 0.5,
+        payloadStr
+      };
 
-      // 2. state_change → 同步更新 tasks 表的 bill_state 字段
+      let stateChange: string | undefined;
       if (event.action === EventAction.STATE_CHANGE && event.payload?.state) {
-        const newState = String(event.payload.state);
-        await taskStore.updateTask(event.task_id, { bill_state: newState });
+        stateChange = String(event.payload.state);
       }
 
-      // 3. vote_passed → 自动存储法案
+      let actJson: string | undefined;
       if (event.action === EventAction.VOTE_PASSED && event.payload?.act) {
-        const actJson = JSON.stringify(event.payload.act);
-        await taskStore.storeAct(event.task_id, actJson);
+        actJson = JSON.stringify(event.payload.act);
       }
 
-      // 4. constitutional/unconstitutional → 自动存储判决
+      let verdict: { constitutional: boolean, ruling: string, evidence: string } | undefined;
       if (
         (event.action === EventAction.CONSTITUTIONAL || event.action === EventAction.UNCONSTITUTIONAL) &&
         event.payload?.verdict
       ) {
         const verdictData = event.payload.verdict as Record<string, unknown>;
-        const constitutional = Boolean(verdictData.constitutional ?? false);
-        const ruling = String(verdictData.ruling ?? '');
-        const evidence = JSON.stringify(verdictData.evidence ?? []);
-        await taskStore.storeVerdict(event.task_id, constitutional, ruling, evidence);
+        verdict = {
+          constitutional: Boolean(verdictData.constitutional ?? false),
+          ruling: String(verdictData.ruling ?? ''),
+          evidence: JSON.stringify(verdictData.evidence ?? [])
+        };
+      }
+
+      if (taskStore.storeEventBatch) {
+        // Bug 52 fix: Atomic transaction
+        await taskStore.storeEventBatch(event.task_id, eventData, stateChange, actJson, verdict);
+      } else {
+        // Fallback
+        await taskStore.storeEvent(
+          event.task_id,
+          eventData.sourceAgent,
+          eventData.action,
+          eventData.emotion,
+          eventData.intensity,
+          payloadStr,
+        );
+        if (stateChange) await taskStore.updateTask(event.task_id, { bill_state: stateChange });
+        if (actJson) await taskStore.storeAct(event.task_id, actJson);
+        if (verdict) await taskStore.storeVerdict(event.task_id, verdict.constitutional, verdict.ruling, verdict.evidence);
       }
     } catch (err) {
       console.error('[DB Bridge] Failed to store event:', err);
@@ -191,10 +208,13 @@ export async function runPetition(
     });
   } catch (error) {
     // 保证最终状态一致性：任何异常都必须以 FAILED 终结
+    // Bug 53 fix: Do not swallow error object stack trace
+    const errorMsg = error instanceof Error ? `${error.message}\n${error.stack}` : String(error);
+    console.error(`[Pipeline] Unhandled rejection for task ${taskId}:`, error);
     try {
       await state.taskStore.updateTask(taskId, {
         status: TaskStatus.FAILED,
-        result: error instanceof Error ? error.message : String(error),
+        result: errorMsg,
       });
     } catch (updateErr) {
       console.error('[Pipeline] Failed to update task status to FAILED:', updateErr);

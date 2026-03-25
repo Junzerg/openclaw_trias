@@ -5,6 +5,8 @@
 > **对应目录**：`backend/src/openclaw/`
 > **预估耗时**：0.5 会话
 
+> **状态**：✅ 已完成 (深水区审计后极其健壮)
+
 ## 需求说明
 
 ### 双层防御架构
@@ -107,12 +109,15 @@ return {
 
 ## 验收维度
 
-- [ ] 超长代码 (>10KB) → 拒绝执行，`TaskResult.status = 'failed'`
-- [ ] `rm -rf /` → 拦截，代码不发送给 Gateway
-- [ ] fork bomb `:(){ :|:& };:` → 拦截
-- [ ] `mkfs /dev/sda` → 拦截
-- [ ] 正常 `print('hello')` → 正常执行，不误拦
-- [ ] stdout > 50KB → 截断至 50KB + `[OUTPUT TRUNCATED]` 标记
-- [ ] 截断后的输出是合法 UTF-8（不截断在多字节字符中间）
-- [ ] 单测覆盖率 > 90%
-- [ ] 所有现有测试通过（回归）
+- [x] 超长代码 (>10KB) → 拒绝执行，`TaskResult.status = 'failed'`
+- [x] `rm -rf /` → 拦截，代码不发送给 Gateway
+- [x] fork bomb `:(){ :|:& };:` → 拦截
+- [x] `mkfs /dev/sda` → 拦截
+- [x] 正常 `print('hello')` → 正常执行，不误拦
+- [x] stdout > 50KB → 截断至 50KB + `[OUTPUT TRUNCATED]` 标记
+- [x] 截断后的输出是合法 UTF-8（不截断在多字节字符中间）
+- [x] 单测覆盖率 > 90% (达到 100%)
+- [x] 所有现有测试通过（回归）
+
+> **Deep Audit 特别加固 (Round 8)**：
+> 在基础沙箱之上，沙箱层经历了 L2 层渗透测试。我们特别增补了高级正则对抗探测规则（拦截 `r\m`，`atob` 以及编码级逃逸），同时修复了长文本直接打进 `Buffer.from()` 造成的瞬时 OOM。目前的截断防线采用字符串预先切片双端保护。

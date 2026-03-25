@@ -253,17 +253,23 @@ describe('TaskStore', () => {
 
   // ─── PK 冲突 ────────────────────────────────────────────────────
 
-  describe('duplicate PK conflict', () => {
-    it('should throw when storeAct is called twice for same task_id', async () => {
+  describe('UPSERT behavior (duplicate PK)', () => {
+    it('should overwrite when storeAct is called twice for same task_id', async () => {
       await store.createTask('dup-act', 'Duplicate act');
       await store.storeAct('dup-act', '{"title":"First"}');
-      await expect(store.storeAct('dup-act', '{"title":"Second"}')).rejects.toThrow();
+      await store.storeAct('dup-act', '{"title":"Second"}');
+      const act = await store.getTaskAct('dup-act');
+      expect(act!.act_json).toBe('{"title":"Second"}');
     });
 
-    it('should throw when storeVerdict is called twice for same task_id', async () => {
+    it('should overwrite when storeVerdict is called twice for same task_id', async () => {
       await store.createTask('dup-verd', 'Duplicate verdict');
       await store.storeVerdict('dup-verd', true, 'First ruling', '[]');
-      await expect(store.storeVerdict('dup-verd', false, 'Second ruling', '[]')).rejects.toThrow();
+      await store.storeVerdict('dup-verd', false, 'Second ruling', '["new"]');
+      
+      const verdict = await store.getTaskVerdict('dup-verd');
+      expect(verdict!.constitutional).toBe(0);
+      expect(verdict!.ruling).toBe('Second ruling');
     });
   });
 

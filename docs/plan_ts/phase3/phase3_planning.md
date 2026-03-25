@@ -77,9 +77,11 @@ model_routing:
 | **[3.3 模型路由与 Agent 配置](task3.3_model_routing.md)** ✅ | `config/` + `base.ts` + `constitution.yaml` | ~150 行 | ⭐⭐ 低 | L1 基础设施 |
 | **[3.4 SecEngineering 真实代码执行](task3.4_sec_engineering.md)** ✅ | `sec-engineering.ts` 重构 | ~200 行改动 | ⭐⭐⭐⭐ 高 | L2 执行层 |
 | **[3.5 SecState 搜索与浏览对接](task3.5_sec_state.md)** ✅ | `sec-state.ts` 重构 | ~120 行改动 | ⭐⭐⭐ 中 | L2 执行层 |
-| **[3.6 安全沙箱与执行约束](task3.6_sandbox.md)** | `sandbox.ts` 新建 + 集成 | ~150 行新增 | ⭐⭐⭐ 中 | L3 安全层 |
-| **[3.7 Pipeline 集成调试](task3.7_pipeline_integration.md)** | `government.ts` 调整 + 联调 | ~100 行改动 | ⭐⭐⭐ 中 | L4 集成层 |
-| **[3.8 端到端真实验证](task3.8_e2e_verification.md)** | E2E 测试 + 全路径覆盖 | ~350 行测试 | ⭐⭐ 低 | L5 验证层 |
+| **[3.6 安全沙箱与执行约束](task3.6_sandbox.md)** ✅ | `sandbox.ts` 新建 + 集成 | ~150 行新增 | ⭐⭐⭐ 中 | L3 安全层 |
+| **[3.7 Pipeline 集成调试](task3.7_pipeline_integration.md)** ✅ | `government.ts` 调整 + 联调 | ~100 行改动 | ⭐⭐⭐ 中 | L4 集成层 |
+| **[3.8 端到端真实验证](task3.8_e2e_verification.md)** ✅ | E2E 测试 + 全路径覆盖 | ~350 行测试 | ⭐⭐ 低 | L5 验证层 |
+| **[3.9 深度零信任审计与架构加固](task3.9_deep_audit_remediation.md)** ✅ | 并发、隔离、边界强化 | 全局修缮 | ⭐⭐⭐⭐ 高 | L6 架构加固层 |
+| **[3.10 已知问题与持续修复登记册](task3.10_known_issues.md)** 🔄 | 跨阶段 Bug 追踪 | 活文档 | — | L∞ 持续维护 |
 
 ---
 
@@ -97,6 +99,9 @@ graph TD
     T33 --> T37
     T36 --> T38[Task 3.8<br>E2E 验证<br>L5]
     T37 --> T38
+    T38 --> T39[Task 3.9<br>深度审计加固<br>L6]
+    T39 --> T310[Task 3.10<br>已知问题登记册<br>L∞ 持续维护]
+    T310 -.->|跨阶段更新| T310
 ```
 
 > **并行机会**：
@@ -432,10 +437,10 @@ SecState.executeTask(step) →
 
 ### 验收标准
 
-- [ ] Pipeline 全链路走通：Petition → 辩论 → 签署 → 真实执行 → 审查 → 交付
-- [ ] `ExecutionReport` 包含真实输出（非 `[Mock]`）
-- [ ] 大法官偏离度评分合理
-- [ ] 事件总线正确推送所有事件
+- [x] Pipeline 全链路走通：Petition → 辩论 → 签署 → 真实执行 → 审查 → 交付
+- [x] `ExecutionReport` 包含真实输出（非 `[Mock]`）
+- [x] 大法官偏离度评分合理
+- [x] 事件总线正确推送所有事件
 
 ---
 
@@ -467,13 +472,13 @@ SecState.executeTask(step) →
 
 ### 验收标准
 
-- [ ] 所有现有测试零回归
-- [ ] 新增 E2E 全绿
-- [ ] 真实 LLM + CodeExecution 走通 Happy Path
-- [ ] Pipeline 期间 HTTP API 正常响应
-- [ ] 前端像素演播厅正确渲染
-- [ ] `llm_thinking` 进度事件正确推送
-- [ ] 分支覆盖率 ≥ Phase 2 的 11/11
+- [x] 所有现有测试零回归
+- [x] 新增 E2E 全绿
+- [x] 真实 LLM + CodeExecution 走通 Happy Path
+- [x] Pipeline 期间 HTTP API 正常响应
+- [x] 前端像素演播厅正确渲染
+- [x] `llm_thinking` 进度事件正确推送
+- [x] 分支覆盖率 ≥ Phase 2 的 11/11
 
 ---
 
@@ -505,3 +510,15 @@ Phase 3 **无需新增 npm 依赖**。基于 Node.js 内置 `child_process.spawn
 | Token 成本累积 | 预算超支 | 开发全 Sonnet；最终验证才启用贵模型 |
 | 代码执行副作用 | 宿主机受损 | L1 (Gateway) + L2 (sandbox) 双层防御 |
 | deviation scorer 误判代码输出 | 合理输出被判违宪 | 调优 scorer prompt |
+
+---
+
+## 跨阶段 Bug 追踪
+
+> 在集成联调、E2E 验证、UX 开发等后续阶段中发现的已知问题，统一记录在 **[Task 3.10: 已知问题与持续修复登记册](task3.10_known_issues.md)** 中。
+>
+> - **Phase 3 联调 Bug (KI-3.1 ~ KI-3.6)**：早期 E2E 联调发现的 6 个问题，均已修复。详情已归档在本登记册中。
+> - **持续更新问题 (KI-3.7+)**：后续阶段发现的 Bug 追加至 Task 3.10，按 `KI-{phase}.{seq}` 编号。
+>
+> Task 3.10 是一个**活文档**，不会"完成"，随项目生命周期持续维护。
+

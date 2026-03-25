@@ -50,7 +50,10 @@ export class CliTransport implements ITransport {
       const child: ChildProcess = spawn(
         this.cliBin,
         args,
-        { env: env ? { ...process.env, ...env } : { ...process.env } },
+        { 
+          env: env ? { ...process.env, ...env } : { ...process.env },
+          detached: true // Bug Fix: 启用独立进程组以支持树形清理，防止子进程泄漏
+        },
       );
 
       let output = '';
@@ -79,10 +82,20 @@ export class CliTransport implements ITransport {
       // Timeout protection: SIGTERM first, SIGKILL fallback after 2 s
       // .unref() so the timer doesn't prevent Node.js exit in short-lived scripts
       const timer = setTimeout(() => {
-        child.kill('SIGTERM');
+        // Bug Fix: kill the entire process group (negative PID) instead of just the wrapper shell
+        if (child.pid) {
+          try { process.kill(-child.pid, 'SIGTERM'); } catch { /* ignore */ }
+        } else {
+          try { child.kill('SIGTERM'); } catch { /* ignore */ }
+        }
+        
         // If the process ignores SIGTERM, escalate after 2 s
         setTimeout(() => {
-          try { child.kill('SIGKILL'); } catch { /* already dead */ }
+          if (child.pid) {
+            try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already dead */ }
+          } else {
+            try { child.kill('SIGKILL'); } catch { /* already dead */ }
+          }
         }, 2000).unref();
         settle(() =>
           reject(new Error(`CLI timeout after ${timeoutMs}ms`)),

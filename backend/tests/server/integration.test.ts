@@ -397,7 +397,7 @@ describe('Pipeline Integration', () => {
 
       const task = await taskStore.getTask(taskId);
       expect(task!.status).toBe(TaskStatus.FAILED);
-      expect(task!.result).toBe('LLM API error');
+      expect(task!.result).toContain('LLM API error');
     });
   });
 

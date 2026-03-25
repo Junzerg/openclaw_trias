@@ -312,14 +312,14 @@ describe('Executive Branch Task 1.6', () => {
         EventAction.TOOL_CALL,
         expect.objectContaining({ status: 'running', step_index: 0, tool_name: 'CodeExecution' }),
         undefined,
-        'task-10'
+        'act-xx'
       );
 
       expect(emitSpy).toHaveBeenCalledWith(
         EventAction.TOOL_CALL,
         expect.objectContaining({ status: 'success', step_index: 0, tool_name: 'CodeExecution' }),
         undefined,
-        'task-10'
+        'act-xx'
       );
     });
   });

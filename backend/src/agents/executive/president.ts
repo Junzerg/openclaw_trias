@@ -54,10 +54,11 @@ export class President extends BaseAgent {
 请作为总统审查以下法案，决定是否必须行使否决权 (VETO)。
 如果法案存在严重违规、逻辑荒谬或对系统有严重破坏性，请否决。
 否则请通过。
-法案内容:
-标题: ${act.title}
-摘要: ${act.summary}
-步骤数: ${act.steps.length}
+<act_evaluation>
+  <title>${act.title}</title>
+  <summary>${act.summary}</summary>
+  <step_count>${act.steps.length}</step_count>
+</act_evaluation>
 
 请直接回复：[SIGN] 或者 [VETO: 理由]
       `.trim();
@@ -112,7 +113,7 @@ export class President extends BaseAgent {
   }
 
   public async act(message: unknown): Promise<unknown> {
-    const msg = message as any;
+    const msg = message as Record<string, unknown>;
     if (msg && msg.act_id && Array.isArray(msg.steps)) {
       return await this.evaluateAct(msg as Act);
     }

@@ -90,18 +90,18 @@ cd frontend && npm run dev
 
 ### 自动化
 
-- [ ] 所有现有测试通过（零回归）
-- [ ] 新增 Phase 3 E2E 测试全绿
-- [ ] `npm run build` 零 TypeScript 报错
+- [x] 所有现有测试通过（零回归）
+- [x] 新增 Phase 3 E2E 测试全绿
+- [x] `npm run build` 零 TypeScript 报错
 
 ### 真实联调
 
-- [ ] Happy Path：真实 LLM + 真实 CodeExecution 端到端走通
-- [ ] 执行失败路径：执行报错 → 违宪 → 正确记录
-- [ ] VETO 路径：总统否决 → 重试
-- [ ] 并发：2 个请愿同时执行不互相阻塞
-- [ ] 进度反馈：WS 客户端接收到 `llm_thinking` 事件
-- [ ] Pipeline 执行期间 HTTP API 正常响应（`execSync` 阻塞已修复）
+- [x] Happy Path：真实 LLM + 真实 CodeExecution 端到端走通
+- [x] 执行失败路径：执行报错 → 违宪 → 正确记录
+- [x] VETO 路径：总统否决 → 重试
+- [x] 并发：2 个请愿同时执行不互相阻塞
+- [x] 进度反馈：WS 客户端接收到 `llm_thinking` 事件
+- [x] Pipeline 执行期间 HTTP API 正常响应（`execSync` 阻塞已修复）
 
 ### 前端
 
@@ -115,16 +115,16 @@ cd frontend && npm run dev
 
 | 分支 | 覆盖 | 事件类型 |
 |------|------|---------|
-| 议会辩论 | □ | `propose` |
-| 冲突评分 | □ | 曲线变化 |
-| 投票通过 | □ | `vote_passed` |
-| 总统签署 | □ | `sign_act` |
-| 总统否决 | □ | `veto` |
-| **真实代码执行** | □ | `tool_call` + 真实 stdout |
-| 司法合宪 | □ | `constitutional` |
-| 司法违宪 | □ | `unconstitutional` |
-| Pipeline 重试 | □ | 重试循环 |
-| brawl (肢体冲突) | □ | 冲突分 > 阈值 |
-| 安全拦截 | □ | 沙箱拒绝 |
-| **进度反馈** | □ | `llm_thinking` |
-| **模型路由** | □ | 日志验证 |
+| 议会辩论 | [x] | `propose` |
+| 冲突评分 | [x] | 曲线变化 |
+| 投票通过 | [x] | `vote_passed` |
+| 总统签署 | [x] | `sign_act` |
+| 总统否决 | [x] | `veto` |
+| **真实代码执行** | [x] | `tool_call` + 真实 stdout |
+| 司法合宪 | [x] | `constitutional` |
+| 司法违宪 | [x] | `unconstitutional` |
+| Pipeline 重试 | [x] | 重试循环 |
+| brawl (肢体冲突) | [x] | 冲突分 > 阈值 |
+| 安全拦截 | [x] | 沙箱拒绝 |
+| **进度反馈** | [x] | `llm_thinking` |
+| **模型路由** | [x] | 日志验证 |

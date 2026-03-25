@@ -36,6 +36,8 @@ export class TaskStore implements ITaskStore {
 
     this.db = new Database(this.dbPath);
     this.db.pragma('journal_mode = WAL');
+    this.db.pragma('synchronous = NORMAL'); // 极大提升 WAL 模式下的并发写入能力（写盘转交 OS 缓冲区）
+    this.db.pragma('busy_timeout = 5000');  // 防止高并发时抛出 SQLITE_BUSY 导致 Node.js 进程奔溃
     this.db.pragma('foreign_keys = ON');
 
     this.db.exec(`
@@ -83,6 +85,27 @@ export class TaskStore implements ITaskStore {
         FOREIGN KEY (task_id) REFERENCES tasks(task_id)
       )
     `);
+
+    // Bug Fix: 清理僵尸任务 (Zombie Tasks)
+    // 如果 Node.js 进程在执行期间意外崩溃 (如 OOM, SIGKILL, 宿主机断电)，
+    // 内存中的队列会被清空，但数据库中残留的状态会永远卡在 PENDING 或 RUNNING。
+    // 这会导致前端永久判定为“执行中”。在每次启动时，必须将这些悬空任务置为 FAILED。
+    const now = new Date().toISOString();
+    const info = this.db.prepare(`
+      UPDATE tasks 
+      SET status = ?, result = ?, updated_at = ?
+      WHERE status IN (?, ?)
+    `).run(
+      TaskStatus.FAILED, 
+      'Server unexpectedly terminated during execution (Zombie Task cleaned on startup)', 
+      now, 
+      TaskStatus.PENDING, 
+      TaskStatus.RUNNING
+    );
+
+    if (info.changes > 0) {
+      console.warn(`[TaskStore] Cleaned up ${info.changes} zombie task(s) on startup.`);
+    }
   }
 
   async close(): Promise<void> {
@@ -208,6 +231,48 @@ export class TaskStore implements ITaskStore {
     `).run(taskId, now, sourceAgent, action, emotion, intensity, payload);
   }
 
+  async storeEventBatch(
+    taskId: string,
+    eventData: { sourceAgent: string, action: string, emotion: string, intensity: number, payloadStr: string },
+    stateChange?: string,
+    actJson?: string,
+    verdict?: { constitutional: boolean, ruling: string, evidence: string }
+  ): Promise<void> {
+    const db = this.ensureDb();
+    const now = new Date().toISOString();
+
+    // Bug 52 fix: Use SQLite transactions to prevent partial writes
+    const tx = db.transaction(() => {
+      // 1. insert event
+      db.prepare(`
+        INSERT INTO events (task_id, timestamp, source_agent, action, emotion, intensity, payload)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(taskId, now, eventData.sourceAgent, eventData.action, eventData.emotion, eventData.intensity, eventData.payloadStr);
+
+      // 2. update state
+      if (stateChange) {
+        db.prepare('UPDATE tasks SET bill_state = ?, updated_at = ? WHERE task_id = ?')
+          .run(stateChange, now, taskId);
+      }
+
+      // 3. store act
+      if (actJson) {
+        db.prepare('INSERT OR REPLACE INTO acts (task_id, act_json, created_at) VALUES (?, ?, ?)')
+          .run(taskId, actJson, now);
+      }
+
+      // 4. store verdict
+      if (verdict) {
+         db.prepare(`
+          INSERT OR REPLACE INTO verdicts (task_id, constitutional, ruling, evidence, created_at)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(taskId, verdict.constitutional ? 1 : 0, verdict.ruling, verdict.evidence, now);
+      }
+    });
+
+    tx();
+  }
+
   async getTaskEvents(
     taskId: string,
   ): Promise<Array<{ action: string; source_agent: string; payload: string }>> {
@@ -225,7 +290,7 @@ export class TaskStore implements ITaskStore {
     const now = new Date().toISOString();
 
     db.prepare(`
-      INSERT INTO acts (task_id, act_json, created_at) VALUES (?, ?, ?)
+      INSERT OR REPLACE INTO acts (task_id, act_json, created_at) VALUES (?, ?, ?)
     `).run(taskId, actJson, now);
   }
 
@@ -252,7 +317,7 @@ export class TaskStore implements ITaskStore {
 
     // SQLite 没有 BOOLEAN 类型，存为 0/1 INTEGER
     db.prepare(`
-      INSERT INTO verdicts (task_id, constitutional, ruling, evidence, created_at)
+      INSERT OR REPLACE INTO verdicts (task_id, constitutional, ruling, evidence, created_at)
       VALUES (?, ?, ?, ?, ?)
     `).run(taskId, constitutional ? 1 : 0, ruling, evidence, now);
   }

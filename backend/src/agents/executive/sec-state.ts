@@ -24,7 +24,9 @@ export class SecretaryOfState extends BaseAgent {
         return `你现在是国务卿（Secretary of State）。请使用你的搜索工具（Search）完成以下任务。
 返回搜索到的关键信息摘要，确保信息准确且相关。
 
-任务：${step.description}
+<task_description>
+${step.description}
+</task_description>
 
 要求：
 - 使用搜索工具查找相关信息
@@ -34,7 +36,9 @@ export class SecretaryOfState extends BaseAgent {
       case 'WebBrowser':
         return `你现在是国务卿（Secretary of State）。请使用你的浏览器工具（WebBrowser）完成以下任务。
 
-任务：${step.description}
+<task_description>
+${step.description}
+</task_description>
 
 要求：
 - 使用浏览器工具访问相关页面
@@ -42,7 +46,7 @@ export class SecretaryOfState extends BaseAgent {
 - 如果页面无法访问，说明原因`;
 
       default:
-        return `请完成以下任务：${step.description}`;
+        return `请完成以下任务：\n<task_description>\n${step.description}\n</task_description>`;
     }
   }
 

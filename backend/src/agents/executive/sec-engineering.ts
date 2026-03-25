@@ -27,9 +27,9 @@ export class SecretaryOfEngineering extends BaseAgent {
     const prompt = `你是一个精确的代码生成器。根据以下任务描述，生成可直接执行的代码。
 
 任务描述：
-"""
+<task_description>
 ${description}
-"""
+</task_description>
 
 你必须返回一段合法 JSON（不要包含 Markdown 格式包裹）：
 {
@@ -144,7 +144,7 @@ ${description}
       tool_name: task.step.required_skill,
       step_index: task.step.index,
       status: 'running',
-    }, undefined, task.task_id);
+    }, undefined, task.act_id);
 
     try {
       // Phase 1: Code Generation
@@ -158,7 +158,7 @@ ${description}
           step_index: task.step.index,
           status: 'failed',
           error: `安全检查未通过: ${validation.reason}`,
-        }, undefined, task.task_id);
+        }, undefined, task.act_id);
 
         return {
           task_id: task.task_id,
@@ -178,27 +178,30 @@ ${description}
         tool_name: task.step.required_skill,
         step_index: task.step.index,
         status: success ? 'success' : 'failed',
-      }, undefined, task.task_id);
+      }, undefined, task.act_id);
 
       // Phase 3: Output Truncation (Task 3.6)
+      const rawStdout = execResult.stdout || '';
+      const rawStderr = execResult.stderr || '';
+      const finalOutputBuffer = `[Generated ${language} Code]:\n${code}\n\n[Execution Output]:\n${success ? rawStdout : (rawStderr || rawStdout || 'No output')}`;
+      
       return {
         task_id: task.task_id,
         step_index: task.step.index,
         status: success ? 'success' : 'failed',
-        output: success
-          ? truncateOutput(execResult.stdout || '')
-          : (execResult.stderr || execResult.stdout || ''),
-        error: success ? undefined : (execResult.stderr || execResult.stdout || 'Unknown execution error'),
+        output: truncateOutput(finalOutputBuffer),
+        error: success ? undefined : (rawStderr || rawStdout || 'Unknown execution error'),
         tokens_consumed: task.step.estimated_tokens,
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
       // Emit failure event
       this.emitEvent(EventAction.TOOL_CALL, {
         tool_name: task.step.required_skill,
         step_index: task.step.index,
         status: 'failed',
-        error: err.message || String(err),
-      }, undefined, task.task_id);
+        error: errorMessage,
+      }, undefined, task.act_id);
 
       // Return structured failure — never block the Pipeline
       return {
@@ -207,7 +210,7 @@ ${description}
         status: 'failed',
         output: '',
         tokens_consumed: 0,
-        error: err.message || String(err),
+        error: errorMessage,
       };
     }
   }

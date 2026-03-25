@@ -518,4 +518,87 @@ describe('Phase 3 Pipeline Integration (Task 3.7)', () => {
     expect(thinkingEvents[0].payload.elapsed_seconds).toBe(3);
     expect(thinkingEvents[1].payload.elapsed_seconds).toBe(6);
   });
+
+  // ── Brawl (肢体冲突) branch: conflict score > threshold ──
+
+  it('should emit BRAWL + ORDER events when debate conflict exceeds threshold', async () => {
+    const act = makeAct();
+
+    // Capture brawl/order events from the bus
+    const brawlEvents: any[] = [];
+    const orderEvents: any[] = [];
+    const origPublish = gov.bus.publish.bind(gov.bus);
+    vi.spyOn(gov.bus, 'publish').mockImplementation(async (topic: string, event: any) => {
+      if (event?.action === 'brawl') brawlEvents.push(event);
+      if (event?.action === 'order') orderEvents.push(event);
+      // Still forward to real bus for event_log and lifecycle
+      await origPublish(topic as any, event);
+    });
+
+    // Mock adapter.callLLM to produce high-conflict debate, then standard post-debate path
+    const responseQueue = [
+      // --- DebateEngine: radical.propose → contains rm -rf → score=95 (extreme) ---
+      '激进提案：执行 rm -rf 彻底重建系统！',
+      // --- DebateEngine: conservative.critique (round 1) ---
+      '保守派：绝对荒谬！坚决反对！不可行！',
+      // --- Speaker.intervene (score 95 > conflict_threshold 80) ---
+      '紧急控场！请双方立刻停止！',
+      // score >= 90 → forced break, debate ends after 1 round
+      // --- Vote: radical.vote ---
+      '赞成',
+      // --- Vote: conservative.vote ---
+      '赞成',
+      // --- Speaker.generateAct LLM ---
+      '{"description": "步骤1: 使用 CodeExecution 技能", "estimated_tokens": 100, "required_skill": "CodeExecution"}',
+    ];
+    let callIdx = 0;
+    vi.spyOn(gov.adapter, 'callLLM').mockImplementation(async () => {
+      const content = responseQueue[callIdx++] ?? '[Mock] 默认回复';
+      return { content, rawOutput: content };
+    });
+
+    // Mock executeCode (not needed for debate, but prevents adapter error)
+    vi.spyOn(gov.adapter, 'executeCode').mockResolvedValue({
+      stdout: 'ok', stderr: '', exitCode: 0, rawOutput: 'ok',
+    });
+
+    // Executive: president signs (no veto)
+    vi.spyOn(gov.president, 'evaluateAct').mockResolvedValue(null);
+
+    // Executive: execution succeeds
+    vi.spyOn(gov.executionEngine, 'executeAct').mockResolvedValue({
+      act_id: act.act_id,
+      overall_status: 'completed',
+      task_results: [{
+        task_id: act.act_id, step_index: 0, status: 'success',
+        output: 'hello world\n', tokens_consumed: 50,
+      }],
+      total_tokens_consumed: 50,
+      execution_time_seconds: 1,
+    });
+
+    // Judicial: constitutional
+    vi.spyOn(gov.chiefJustice, 'reviewResult').mockResolvedValue({
+      verdict_id: randomUUID(), act_id: act.act_id,
+      constitutional: true, ruling: '合宪', evidence: [], created_at: new Date(),
+    } as any);
+    vi.spyOn(gov.chiefJustice, 'issueJudgment').mockResolvedValue({ payload: {} } as any);
+
+    const result = await gov.receivePetition('极端冲突测试：触发肢体冲突分支');
+
+    // ── Verify brawl branch was exercised ──
+    expect(brawlEvents.length).toBeGreaterThanOrEqual(1);
+    expect(brawlEvents[0].source_agent).toBe('speaker');
+    // emitEvent extracts `intensity` from payload to event top level (Bug 16 fix in base.ts)
+    expect(brawlEvents[0].intensity).toBeCloseTo(0.95, 1);
+
+    // ── Verify ORDER (议长控场) was emitted after brawl ──
+    expect(orderEvents.length).toBeGreaterThanOrEqual(1);
+    expect(orderEvents[0].source_agent).toBe('speaker');
+    // `statement` is spread into event top level via cleanPayload in emitEvent
+    expect(orderEvents[0].statement).toContain('紧急控场');
+
+    // ── Pipeline should still complete successfully ──
+    expect(result).toContain('已交付');
+  });
 });
