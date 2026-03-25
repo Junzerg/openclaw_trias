@@ -368,18 +368,27 @@ abstract class BaseAgent {
 
 ## Phase 4 · UX 优化 & 产品化
 
-**目标**：用户体验打磨，完善交互闭环，产品级可用。
+**目标**：将开发者级原型升级为产品级体验——用户输入需求 → 观看 AI 辩论动画 → 获得执行结果 → 查看详细日志。
 
-| 序号 | 工作项 | 说明 |
-|------|--------|------|
-| 4.1 | **选民请愿 UI** | 用户输入面板：提交需求（Petition）、快捷模板、任务状态卡片 |
-| 4.2 | **结果展示 UI** | 总统交付备忘录面板（代码/文件/文本输出展示） |
-| 4.3 | **Conflict Score 实时仪表** | 辩论分歧度变化曲线实时可视化 |
-| 4.4 | **Token 仪表盘** | 各分支的 Token 消耗分布 + 辩论轮次统计 |
-| 4.5 | **辩论回放日志** | 可点击查看每轮 Critique/Rebuttal 的详细 CoT |
-| 4.6 | **SOUL.md 热编辑** | 前端 Markdown 编辑器，在线修改 Agent 人设，无需重启 |
-| 4.7 | **错误处理 & 重试** | LLM 超时自动重试、Veto 重入上限、违宪重做上限、WebSocket 断线重连事件补发 |
-| 4.8 | **Discord 渠道集成** | 利用 OpenClaw 的 Discord Channel，支持在 Discord 中发起 Petition、接收动画链接 |
+> 详见 [Phase 4 规划白皮书](plan_ts/phase4/phase4_planning.md)
+
+| 序号 | 工作项 | 说明 | 涉及端 |
+|------|--------|------|--------|
+| 4.1 | **前端架构重构 & 设计系统** | AppContext + AppShell 三栏布局 + CSS Variables 设计令牌 + 清除 Debug 按钮 | 🖥️ 前端 |
+| 4.2 | **Petition 提交面板 & 快捷模板** | REST API 封装 + textarea + 模板气泡 + 加载状态 | 🖥️ 前端 |
+| 4.3 | **任务历史列表 & 状态追踪** | TaskList + TaskCard + BillState 徽章 + 动态 WS taskId 切换 | 🖥️ 前端 |
+| 4.4 | **辩论日志面板 & 实时 WS 收集** | 左右对抗时间线（激进派红/保守派蓝/Speaker 黄） | 🖥️ 前端 |
+| 4.5 | **Conflict Score 曲线 & Recharts** | 安装 Recharts + 实时折线图 + 历史回填 | 🖥️ 前端 |
+| 4.6 | **执行结果面板 & 判决展示** | 代码高亮 + VerdictBanner（合宪绿/违宪红） | 🖥️ 前端 |
+| 4.7 | **Token 用量埋点 & 仪表盘** | 后端 4 处 WS 事件埋点 + 前端饼图/折线图 | 🖥️🔧 双端 |
+| 4.8 | **WS 韧性 & 断线事件补发** | 指数退避重连 + Ring Buffer + replay 指令 | 🖥️🔧 双端 |
+| 4.9 | **SOUL.md 热编辑面板** | 后端 3 个新 API + 前端 Markdown 编辑器 + cache invalidation | 🖥️🔧 双端 |
+| 4.10 | **Phaser 场景过渡 & Canvas 响应式** | SceneManager fade 过渡 + 三大 Scene 响应式坐标 | 🎮 Phaser |
+| 4.11 | **🏔️ 议会场景动效打磨** | 卷轴飞入/信使入场 + brawl Lv3 连击 + 气泡精调 | 🎮 Phaser |
+| 4.12 | **🏢 行政场景动效打磨** | 双 Secretary 格子间 + 代码流增强 + 印章 sprite | 🎮 Phaser |
+| 4.13 | **⚖️ 司法场景动效 & 音效扩充** | resetState Bug 修复 + 聚光灯动态 + SoundManager 补全 | 🎮 Phaser |
+
+**建议执行顺序**：`4.1 → 4.10 → 4.11 → 4.12 → 4.13 → 4.2 → 4.3 → 4.4 → 4.5 → 4.6 → 4.7 → 4.8 → 4.9`
 
 **产出**：完整可用的产品级体验 — 输入需求 → 观看 AI 辩论动画 → 获得结果 → 查看详细日志。
 
@@ -396,6 +405,7 @@ abstract class BaseAgent {
 | 5.3 | **README & Docs** | README 美化、架构图、GIF 演示、二创指南 |
 | 5.4 | **npm 发布** | 可 `npm install -g openclaw-republic` 安装使用 |
 | 5.5 | **开源宣发** | GitHub Release、社区 Demo 文章、录屏截图 |
+| 5.6 | **Discord 渠道集成** | 利用 OpenClaw 的 Discord Channel，支持在 Discord 中发起 Petition、接收动画链接 |
 
 ---
 

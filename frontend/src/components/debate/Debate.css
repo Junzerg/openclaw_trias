@@ -1,0 +1,186 @@
+.debate-log-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  min-height: 100%; /* Allows empty state to vertically center without enforcing max height */
+  /* Remove nested scrollbar config. Let AppShell's .panel-content manage scrolling */
+}
+
+.debate-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  opacity: 0.5;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: var(--spacing-xl);
+  text-align: center;
+}
+
+.debate-round-card {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0; /* Prevents card from shrinking and cropping its contents */
+  background: rgba(26, 31, 46, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all var(--transition-normal);
+}
+
+.debate-round-card.expanded {
+  box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.4);
+}
+
+.round-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  background: rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition-fast);
+}
+
+.round-header:hover {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.round-header-conflict {
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  font-weight: 600;
+  transition: color var(--transition-normal);
+}
+
+.round-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  /* Use grid for smooth height transition hack */
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--transition-normal) ease-in-out, opacity var(--transition-fast), padding var(--transition-normal);
+  opacity: 1;
+}
+
+.round-content > div {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  min-height: 0; /* Critical for 0fr grid collapse hack */
+}
+
+.round-content.collapsed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  pointer-events: none;
+}
+
+.debate-bubble {
+  max-width: 85%;
+  padding: var(--spacing-md);
+  border-radius: 12px;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  position: relative;
+}
+
+/* Markdown Standard Styles within Bubbles */
+.bubble-text p {
+  margin: 0 0 0.75em 0;
+}
+.bubble-text p:last-child {
+  margin-bottom: 0;
+}
+.bubble-text ul, .bubble-text ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+.bubble-text li {
+  margin-bottom: 0.25em;
+}
+.bubble-text strong {
+  font-weight: 600;
+  color: #fff;
+}
+
+.debate-bubble.radical {
+  align-self: flex-start;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-bottom-left-radius: 2px;
+}
+
+.debate-bubble.conservative {
+  align-self: flex-end;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-bottom-right-radius: 2px;
+}
+
+.debate-bubble.speaker {
+  align-self: center;
+  max-width: 95%;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  text-align: center;
+  font-style: italic;
+  color: var(--color-accent-yellow);
+}
+
+.bubble-role {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  margin-bottom: var(--spacing-sm);
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.radical .bubble-role { color: var(--color-accent-red); }
+.conservative .bubble-role { color: var(--color-accent-blue); }
+
+.speaker-icon {
+  margin-right: var(--spacing-xs);
+  font-style: normal;
+}
+
+@keyframes dot-pulse {
+  0% { opacity: 0.2; }
+  50% { opacity: 1; }
+  100% { opacity: 0.2; }
+}
+
+.dot-pulse {
+  animation: dot-pulse 1.5s infinite;
+  letter-spacing: 2px;
+  font-weight: bold;
+}
+
+.thinking-bubble {
+  animation: fade-in-up 0.4s ease-out;
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(15px); }
+  to { opacity: 1; transform: translateY(0); }
+}

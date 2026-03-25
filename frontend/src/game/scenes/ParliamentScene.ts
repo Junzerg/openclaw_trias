@@ -10,6 +10,7 @@ export class ParliamentScene extends Phaser.Scene {
     }
 
     create() {
+        this.cameras.main.fadeIn(300, 0, 0, 0);
         const { width, height } = this.scale;
 
         // 1. Background (stretched to fill)

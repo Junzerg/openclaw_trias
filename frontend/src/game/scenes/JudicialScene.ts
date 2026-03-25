@@ -15,6 +15,7 @@ export class JudicialScene extends BaseScene {
 
   create() {
     super.create();
+    this.cameras.main.fadeIn(300, 0, 0, 0);
     
     // Background - black canvas with court bg
     this.add.rectangle(400, 300, 800, 600, 0x000000);

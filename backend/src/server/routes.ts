@@ -235,9 +235,13 @@ export function createRouter(): Router {
 
         const r = rounds[roundNum - 1];
         if (row.source_agent === 'conservative_mp') {
-          r.conservative_statement = statement;
+          r.conservative_statement = r.conservative_statement 
+            ? r.conservative_statement + '\n\n---\n**Rebuttal:**\n' + statement 
+            : statement;
         } else {
-          r.radical_statement = statement;
+          r.radical_statement = r.radical_statement 
+            ? r.radical_statement + '\n\n---\n**Rebuttal:**\n' + statement 
+            : statement;
         }
         r.conflict_score = conflictScore;
         conflictScores.push(conflictScore);

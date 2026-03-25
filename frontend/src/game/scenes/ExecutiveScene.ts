@@ -14,6 +14,7 @@ export class ExecutiveScene extends BaseScene {
 
   create() {
     super.create();
+    this.cameras.main.fadeIn(300, 0, 0, 0);
     
     // Background
     this.add.image(400, 300, 'bg_executive');
