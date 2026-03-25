@@ -29,16 +29,21 @@ export class Speaker extends BaseAgent {
 
   /**
    * 控场：管理辩论轮次、判定终止条件。
+   *
+   * Bug 40 fix: 接受 petition 作为显式参数，消除并发 pipeline 共享 _currentPetition 的竞态。
+   * 如果调用方不传 petition，退化为使用 _currentPetition（兼容老调用路径）。
    */
   async moderateDebate(
     radical: RadicalMP,
     conservative: ConservativeMP,
     config: DebateConfig,
-    taskId: string
+    taskId: string,
+    petition?: string
   ): Promise<DebateResult> {
     this.requirePermission(Permission.PLAN);
 
-    if (!this._currentPetition) {
+    const effectivePetition = petition ?? this._currentPetition;
+    if (!effectivePetition) {
       throw new Error('尚未接收选民请愿，无法启动辩论');
     }
 
@@ -47,7 +52,7 @@ export class Speaker extends BaseAgent {
       this,
       radical,
       conservative,
-      this._currentPetition,
+      effectivePetition,
       taskId
     );
   }
@@ -100,9 +105,21 @@ export class Speaker extends BaseAgent {
     let parsedSkill = 'CodeExecution';
 
     try {
-      const jsonMatch = result.content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+      // Robustly extract JSON from markdown code block or plain JSON
+      const mdMatch = result.content.match(/```json\n([\s\S]*?)\n```/);
+      let jsonString = '';
+      if (mdMatch && mdMatch[1]) {
+        jsonString = mdMatch[1];
+      } else {
+        // Fallback to plain JSON match if no markdown block is found
+        const jsonMatch = result.content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonString = jsonMatch[0];
+        }
+      }
+
+      if (jsonString) {
+        const parsed = JSON.parse(jsonString);
         if (parsed.description) parsedDescription = parsed.description;
         if (typeof parsed.estimated_tokens === 'number') {
           parsedTokens = parsed.estimated_tokens;

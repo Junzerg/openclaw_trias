@@ -105,11 +105,11 @@ describe('BaseAgent', () => {
     const agent = new DummyAgent('Dummy', 'dummy', Branch.EXECUTIVE, [Permission.EXECUTE], adapter, bus, false);
     
     // In BaseAgent we emit event with `EventAction.TOOL_CALL` inside emitEvent when requested
-    const event = agent.emitEvent('tool_call' as any, { tool: 'abc' });
+    const { event } = agent.emitEvent('tool_call' as any, { tool: 'abc' });
     
     expect(event.source_agent).toBe('dummy');
     expect(event.action).toBe('tool_call');
-    expect(event.payload.tool).toBe('abc');
+    expect((event as any).tool).toBe('abc');
     expect(spy).toHaveBeenCalledWith('execution', event);
   });
 

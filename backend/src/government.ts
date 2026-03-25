@@ -13,6 +13,7 @@ import { BillLifecycle, BillState } from './bus/state-machine';
 import { loadConstitution, resolveModel } from './config/loader';
 import { ConstitutionConfig } from './config/models';
 import { OpenClawAdapter } from './openclaw/adapter';
+import { VoteResult } from './agents/legislative/debate';
 import { 
   BaseEvent, EventAction, EmotionType, VoteEvent
 } from './schemas/events';
@@ -135,13 +136,24 @@ export class CyberGovernment {
     const billId = taskId ?? randomUUID();
     const lifecycle = new BillLifecycle(billId);
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      console.log(`Pipeline attempt ${attempt}/${maxRetries} for bill ${billId}`);
+    for (let attempt = 1; attempt <= 1 + maxRetries; attempt++) {
+      console.log(`Pipeline attempt ${attempt}/${1 + maxRetries} for bill ${billId}`);
 
-      const result = await this._runPipeline(petition, lifecycle, billId);
+      try {
+        const result = await this._runPipeline(petition, lifecycle, billId);
 
-      if (result !== null) {
-        return result;
+        if (result !== null) {
+          return result;
+        }
+      } catch (err: any) {
+        // Unhandled system-level exception — log and abort
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[CyberGovernment] 系统级异常 in pipeline attempt ${attempt}: ${message}`);
+
+        // Force lifecycle back to DRAFTING for safety
+        try { lifecycle.transition(BillState.DRAFTING); } catch { /* ignore transition errors */ }
+
+        return `系统级异常: ${message}。流水线已中止。法案 ${billId} 未完成。`;
       }
 
       console.log(`Bill ${billId} 回到 DRAFTING，重试第 ${attempt} 次`);
@@ -160,6 +172,9 @@ export class CyberGovernment {
     }
     await this._publishLifecycle(billId, "drafting");
 
+    // Bug 23 fix: 重置 ProcessReviewer 历史，防止跨 Act 死循环误报
+    this.chiefJustice.resetProcessHistory();
+
     await this.speaker.receivePetition(petition);
     
     lifecycle.transition(BillState.DEBATING);
@@ -169,7 +184,8 @@ export class CyberGovernment {
       this.radicalMp,
       this.conservativeMp,
       this.constitution.judicial.debate,
-      billId
+      billId,
+      petition  // Bug 40 fix: 显式传递 petition，避免并发 pipeline 竞态
     );
 
     lifecycle.transition(BillState.VOTED);
@@ -205,6 +221,17 @@ export class CyberGovernment {
     await this._publishLifecycle(billId, "executing");
 
     const report = await this.executionEngine.executeAct(act);
+
+    // Bug 6+49 fix: 全失败或部分失败的执行不应送去司法审查
+    // partial: 残缺产出送给 ResultReviewer 会因为只有部分成功输出而产生虚假偏离度评分
+    // failed: ResultReviewer 会把 '(无有效产出)' 传给偏离度评分器，产生虚假的"合宪"判定
+    if (report.overall_status === 'failed' || report.overall_status === 'partial') {
+      console.warn(`[CyberGovernment] 执行状态=${report.overall_status} (bill ${billId})，跳过司法审查，触发重试`);
+      lifecycle.transition(BillState.REVIEWING);
+      lifecycle.transition(BillState.UNCONSTITUTIONAL);
+      lifecycle.transition(BillState.DRAFTING);
+      return null;
+    }
 
     lifecycle.transition(BillState.REVIEWING);
     await this._publishLifecycle(billId, "reviewing");
@@ -254,13 +281,23 @@ export class CyberGovernment {
     await this.bus.publish("legislation", event);
   }
 
-  private _forceVotePassed(voteResult: any): any {
+  private _forceVotePassed(voteResult: VoteResult): VoteResult & { _forced: boolean; _original_vote: { ayes: number; nays: number } } {
+    // Bug 13 fix: 记录原始投票结果以供审计
+    const originalAyes = voteResult.ayes;
+    const originalNays = voteResult.nays;
+    console.warn(
+      `[CyberGovernment] ⚠️ 民主投票被否决 (ayes=${originalAyes}, nays=${originalNays})，` +
+      `启动强制通过。原始投票结果已保留在 _original_vote 字段。`
+    );
+
     return {
       proposal: voteResult.proposal,
-      records: voteResult.records.map((r: any) => ({ voter_role: r.voter_role || r.voterRole, vote: true })),
+      records: voteResult.records.map((r) => ({ voter_role: r.voter_role, vote: true })),
       ayes: voteResult.records.length,
       nays: 0,
-      passed: true
+      passed: true,
+      _forced: true,
+      _original_vote: { ayes: originalAyes, nays: originalNays },
     };
   }
 }

@@ -39,6 +39,16 @@ export class RulesEngine {
       /\bsudo\s+/,         // sudo
       /\bchmod\s+(?:-R\s+)?777\b/, // chmod 777 or chmod -R 777
       /fs\.unlink/i,       // fs.unlink inside scripts
+      /fs\.rm(?:dir|Sync)?/i, // fs.rmdir, fs.rmSync
+      /require\s*\(['"]fs['"]\)\s*\.\s*(?:unlink|rmdir|rm)/i, // require('fs').unlink
+      /\bprocess\.exit\s*\(/,  // forced process exit
+      /\beval\s*\(/,         // eval() injection risk
+      // Bug 25 fix: ESM dynamic import bypasses static require() checks
+      /import\s*\(\s*['"](?:fs|child_process|node:fs|node:child_process)['"]\s*\)/i,
+      // Bug 34 fix: curl/wget piped to shell, and netcat reverse shells
+      /\bcurl\b.*\|\s*(?:ba)?sh\b/i,
+      /\bwget\b.*\|\s*(?:ba)?sh\b/i,
+      /\bnc\s+-e\b/i,       // netcat reverse shell
     ];
     
     for (const pattern of dangerousPatterns) {
@@ -52,7 +62,21 @@ export class RulesEngine {
     }
 
     for (const banned of this._blacklist) {
-      if (cmdLower.includes(banned.toLowerCase())) {
+      const bannedLower = banned.toLowerCase();
+      // Bug 12b fix: 对 'FORMAT' 等通用单词使用严格上下文匹配
+      // 只在独立命令/语句上下文中匹配，避免 "format the output" 等正常用语误报
+      if (bannedLower === 'format') {
+        // 仅匹配 FORMAT C:, FORMAT /FS:, format disk 等磁盘格式化上下文
+        if (/\bformat\s+[a-zA-Z]:/i.test(command) || /\bformat\s+\/[fFqQyY]/i.test(command)) {
+          return {
+            passed: false,
+            rule_name: 'blacklist_command',
+            violation_detail: `命令包含磁盘格式化操作: 'FORMAT'`,
+          };
+        }
+        continue; // 跳过通用 includes 检查
+      }
+      if (cmdLower.includes(bannedLower)) {
         return {
           passed: false,
           rule_name: 'blacklist_command',

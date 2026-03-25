@@ -320,10 +320,14 @@ export class OpenClawAdapter {
         try {
           const rawOutput = await this.runCliCommand(args, envOverride);
           const parsedOutput = this.extractLLMContent(rawOutput);
+
+          // Bug 4 fix: 检测执行输出中的错误模式，而不是硬编码 exitCode=0
+          const exitCode = this._inferExitCode(parsedOutput);
+
           return {
-            stdout: parsedOutput,
-            stderr: '',
-            exitCode: 0,
+            stdout: exitCode === 0 ? parsedOutput : '',
+            stderr: exitCode !== 0 ? parsedOutput : '',
+            exitCode,
             rawOutput,
           };
         } catch (err) {
@@ -333,6 +337,38 @@ export class OpenClawAdapter {
       this.resolveRetryConfig(),
       (msg) => console.log(`[OpenClawAdapter] ${msg}`),
     );
+  }
+  // ── Exit Code Inference ──────────────────────────────────────────────────
+
+  /**
+   * Infer the exit code from CLI execution output.
+   *
+   * Since the OpenClaw CLI wraps exec tool output in an LLM response,
+   * we can't rely on process exit codes. Instead, we pattern-match
+   * common error signatures from Python, Node.js, and shell.
+   */
+  private _inferExitCode(output: string): number {
+    const ERROR_PATTERNS = [
+      // Bug 27 fix: Python traceback — require the follow-up `  File "..."` line
+      // to distinguish real tracebacks from LLM educational content mentioning "Traceback"
+      /^Traceback \(most recent call last\):\n\s+File /m,
+      // Named errors: require start-of-line (not inside quoted prose)
+      /^(?:Syntax|ModuleNotFound|Import|FileNotFound|Permission|OS|Type|Value|Key|Attribute|Runtime|ZeroDivision)Error: /m,
+      /^\w*Exception: /m,                              // Python exceptions
+      /^node:internal\/|^ {4}at .+\(\d+:\d+\)/m,      // Node.js stack trace
+      /^\/bin\/[a-z]+: .+: (not found|Permission denied)/m, // Shell errors
+      /command not found/i,                            // Missing commands
+      /exit code[:\s]+([1-9]\d*)/i,                    // Explicit exit code mention
+      /exited with status ([1-9]\d*)/i,                // Exit status mention
+    ];
+
+    for (const pattern of ERROR_PATTERNS) {
+      if (pattern.test(output)) {
+        return 1;
+      }
+    }
+
+    return 0;
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────

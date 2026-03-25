@@ -118,13 +118,24 @@ export function handleWebSocketConnection(
 
         const prompt = parsedData.data.prompt;
 
-        try {
-          // 创建任务记录
-          await appState.taskStore.createTask(taskId, prompt);
-        } catch {
-          // task_id 已存在(UNIQUE 冲突)，忽略
-          console.warn('[WS] new_task: create failed (task=%j), may already exist', taskId);
+        // Bug 53 fix: Prevent task hijacking. If task already exists, reject.
+        const existing = await appState.taskStore.getTask(taskId);
+        if (existing) {
+          ws.send(JSON.stringify({
+            action: 'error',
+            data: { message: `Task ${taskId} already exists. task_id must be unique for new_task.` },
+            task_id: taskId,
+          }));
+          return;
         }
+
+        // 创建任务记录
+        await appState.taskStore.createTask(taskId, prompt);
+        
+        ws.send(JSON.stringify({
+          action: 'task_started',
+          task_id: taskId
+        }));
 
         // 提交 Pipeline 到队列执行
         await appState.taskQueue.submit(taskId, async () => {

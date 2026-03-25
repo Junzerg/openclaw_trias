@@ -3,6 +3,7 @@ import { EventAction } from '../../schemas/events';
 import { ActStep, ExecutionTask, TaskResult } from '../../schemas/act';
 import { OpenClawAdapter } from '../../openclaw/adapter';
 import { MessageBus } from '../../bus/message-bus';
+import { truncateOutput } from '../../openclaw/sandbox';
 
 export class SecretaryOfState extends BaseAgent {
   protected static _available_tools: string[] = ['WebBrowser', 'Search'];
@@ -95,7 +96,7 @@ export class SecretaryOfState extends BaseAgent {
         task_id: task.task_id,
         step_index: task.step.index,
         status: 'success',
-        output: result.content,
+        output: truncateOutput(result.content),
         tokens_consumed: task.step.estimated_tokens,
       };
     } catch (err: any) {

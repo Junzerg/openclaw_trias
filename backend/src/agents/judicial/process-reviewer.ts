@@ -61,9 +61,14 @@ export class ProcessReviewer {
   private _checkLoop(toolName: string): RuleCheckResult {
     this._actionHistory.push(toolName);
 
-    if (this._actionHistory.length >= this._loopThreshold) {
-      const recent = this._actionHistory.slice(-this._loopThreshold);
-      const allSame = recent.every(name => name === recent[0]);
+    // Bug 43+58 fix: only keep exactly threshold items. This prevents unbounded growth
+    // AND prevents the probabilistic miss of chunked truncation.
+    if (this._actionHistory.length > this._loopThreshold) {
+      this._actionHistory.shift(); // keep exactly length == loopThreshold
+    }
+
+    if (this._actionHistory.length === this._loopThreshold) {
+      const allSame = this._actionHistory.every(name => name === this._actionHistory[0]);
       if (allSame) {
         return {
           passed: false,

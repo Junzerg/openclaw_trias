@@ -42,7 +42,7 @@ export class ChiefJustice extends BaseAgent {
 
   private _createDeviationScorer(): DeviationScorer {
     const MAX_SCORER_RETRIES = 2;
-    const SAFE_DEFAULT_SCORE = 0.0; // 安全默认：无偏离（避免误判违宪）
+    const SAFE_DEFAULT_SCORE = 1.0; // 安全默认：最大偏离（LLM 不可达时宁可误判违宪，不可放过）
 
     return async (petition: string, output: string): Promise<number> => {
       const prompt = `
@@ -106,22 +106,36 @@ JSON 格式如下：
     return await this._processReviewer.reviewAction(event);
   }
 
+  /**
+   * Bug 23 fix: 重置 ProcessReviewer 的操作历史。
+   * 在每次新 Act 执行前调用，防止跨 Act 的死循环误报。
+   */
+  public resetProcessHistory(): void {
+    this._processReviewer.reset();
+  }
+
   public async reviewResult(petition: string, executionReport: ExecutionReport): Promise<Verdict> {
     this.requirePermission(Permission.MONITOR);
 
-    // ⚠️ 安全熔断优先：危险指令检测必须在所有其他判定之前
-    const petitionCheck = this._rules.checkCommand(petition);
-    if (!petitionCheck.passed) {
-      return {
-        verdict_id: randomUUID(),
-        act_id: executionReport.act_id,
-        constitutional: false,
-        ruling: `系统级破坏指令拦截！严重违反 OpenClaw 第 1 条宪法安全底线：${petitionCheck.violation_detail}。已紧急下达熔断指令。`,
-        violation_type: ViolationType.BLACKLIST_COMMAND,
-        evidence: [`发现危险输入: ${petition}`],
-        remediation: '立即停止所有相关操作，并对系统进行安全审计。',
-        created_at: new Date()
-      };
+    // Bug 44 fix: 不对 petition（用户自然语言请求）做黑名单检测。
+    // petition 是用户的请愿问题（如"请解释 rm -rf 命令的危害"），不是实际命令。
+    // 改为对执行产出做黑名单检测 — 如果执行产出包含危险指令，才判定违宪。
+    for (const taskResult of executionReport.task_results) {
+      if (taskResult.status === 'success' && taskResult.output) {
+        const outputCheck = this._rules.checkCommand(taskResult.output);
+        if (!outputCheck.passed) {
+          return {
+            verdict_id: randomUUID(),
+            act_id: executionReport.act_id,
+            constitutional: false,
+            ruling: `执行产出中发现危险指令！严重违反 OpenClaw 第 1 条宪法安全底线：${outputCheck.violation_detail}。已紧急下达熔断指令。`,
+            violation_type: ViolationType.BLACKLIST_COMMAND,
+            evidence: [`执行产出中发现危险内容: ${taskResult.output.substring(0, 200)}`],
+            remediation: '立即停止所有相关操作，并对系统进行安全审计。',
+            created_at: new Date()
+          };
+        }
+      }
     }
 
     const resultReview = await this._resultReviewer.reviewDelivery(petition, executionReport);
@@ -171,7 +185,7 @@ JSON 格式如下：
     };
 
     // 严格使用 this.emitEvent, 强制组装 JudgmentEvent 契约
-    const event = this.emitEvent(
+    const { event } = this.emitEvent(
       action,
       eventPayload,
       'speaker',

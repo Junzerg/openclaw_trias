@@ -33,10 +33,16 @@ export class ConservativeMP extends BaseAgent {
     const content = result.content;
     
     const resultLower = content.toLowerCase();
-    if (content.includes('反对') || resultLower.includes('no') || resultLower.includes('nay')) {
-      return false;
-    }
-    return content.includes('赞成') || resultLower.includes('yes');
+    // Bug 18 fix: 使用更精确的投票解析
+    const cleanedForNay = resultLower
+      .replace(/\bno\s+(problem|issue|doubt|question|objection)s?\b/gi, '')
+      .replace(/\bnot\s+a\s+problem\b/gi, '');
+    const isNay = content.includes('反对') || /\bno\b/.test(cleanedForNay) || /\bnay\b/.test(cleanedForNay);
+    if (isNay) return false;
+    return content.includes('赞成') || content.includes('同意') || content.includes('支持')
+      || /\byes\b/.test(resultLower) || /\baye\b/.test(resultLower)
+      || /\bsupport\b/.test(resultLower) || /\bagree\b/.test(resultLower)
+      || /\bapprove\b/.test(resultLower);
   }
 }
 

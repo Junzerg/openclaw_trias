@@ -7,6 +7,8 @@
 
 import { BaseEvent, EventAction } from '../schemas/events';
 
+const MAX_EVENT_LOG_SIZE = 10_000;
+
 export class EventLogger {
   private _events: BaseEvent[];
 
@@ -16,6 +18,10 @@ export class EventLogger {
 
   public log(event: BaseEvent): void {
     this._events.push(event);
+    // Bug 35+54 fix: 防止无限增长，超过容量则原地通过 splice 丢弃旧数据，保持数组引用
+    if (this._events.length > MAX_EVENT_LOG_SIZE) {
+      this._events.splice(0, MAX_EVENT_LOG_SIZE / 2);
+    }
   }
 
   public get_events(filters?: {
@@ -31,7 +37,11 @@ export class EventLogger {
         return false;
       }
       if (filters?.since) {
-        if (event.timestamp.getTime() < filters.since.getTime()) {
+        // Bug 48 fix: handle both Date objects and ISO string timestamps
+        const eventTime = event.timestamp instanceof Date
+          ? event.timestamp.getTime()
+          : new Date(event.timestamp as unknown as string).getTime();
+        if (isNaN(eventTime) || eventTime < filters.since.getTime()) {
           return false;
         }
       }

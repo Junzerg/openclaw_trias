@@ -8,6 +8,8 @@ import { BaseEvent } from '../schemas/events';
 
 export type Topic = 'legislation' | 'execution' | 'judiciary' | 'lifecycle';
 
+const MAX_EVENT_LOG_SIZE = 10_000;
+
 export const TOPICS: Set<Topic> = new Set([
   'legislation',
   'execution',
@@ -37,6 +39,10 @@ export class MessageBus {
     }
 
     this._event_log.push(event);
+    // Bug 19+45 fix: 防止长期运行导致内存泄漏，使用 splice 原地修改保持引用一致
+    if (this._event_log.length > MAX_EVENT_LOG_SIZE) {
+      this._event_log.splice(0, MAX_EVENT_LOG_SIZE / 2);
+    }
 
     const handlers = this._subscribers.get(topic);
     if (handlers) {

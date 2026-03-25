@@ -32,12 +32,20 @@ export class RadicalMP extends BaseAgent {
     const result = await this.callLLM(prompt);
     const content = result.content;
     
-    // 简单判定：优先检查反对，否则检查赞成
     const resultLower = content.toLowerCase();
-    if (content.includes('反对') || resultLower.includes('no') || resultLower.includes('nay')) {
-      return false;
-    }
-    return content.includes('赞成') || resultLower.includes('yes');
+    // Bug 18 fix: 使用更精确的投票解析
+    // 1. 先排除 "no problem"/"no issue" 等肯定短语中的 "no"
+    const cleanedForNay = resultLower
+      .replace(/\bno\s+(problem|issue|doubt|question|objection)s?\b/gi, '')
+      .replace(/\bnot\s+a\s+problem\b/gi, '');
+    // 2. 检测反对
+    const isNay = content.includes('反对') || /\bno\b/.test(cleanedForNay) || /\bnay\b/.test(cleanedForNay);
+    if (isNay) return false;
+    // 3. 检测赞成（扩展关键词）
+    return content.includes('赞成') || content.includes('同意') || content.includes('支持')
+      || /\byes\b/.test(resultLower) || /\baye\b/.test(resultLower)
+      || /\bsupport\b/.test(resultLower) || /\bagree\b/.test(resultLower)
+      || /\bapprove\b/.test(resultLower);
   }
 }
 

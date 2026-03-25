@@ -81,4 +81,22 @@ export class BillLifecycle {
   public get is_terminal(): boolean {
     return this.current_state === BillState.DELIVERED;
   }
+
+  /**
+   * Bug 10 fix: 强制重置状态到 DRAFTING，用于异常恢复。
+   * 跳过正常的状态转换验证，但记录在历史中以供审计。
+   */
+  public forceReset(): StateTransition {
+    const record: StateTransition = {
+      from_state: this.current_state,
+      to_state: BillState.DRAFTING,
+      timestamp: new Date(),
+    };
+    console.warn(
+      `[BillLifecycle] ⚠️ 强制重置: ${this.current_state} → ${BillState.DRAFTING} (bill ${this.bill_id})`
+    );
+    this._history.push(record);
+    this.current_state = BillState.DRAFTING;
+    return record;
+  }
 }

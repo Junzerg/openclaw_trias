@@ -34,8 +34,19 @@ export class TaskQueue implements ITaskQueue {
   /**
    * 提交任务到队列。
    * factory 不会被立即调用 — 只在并发 slot 空闲时由 drain 循环启动。
+   *
+   * Bug 26 fix: 去重 — 拒绝已在 running 或 pending 中的 taskId。
    */
   async submit(taskId: string, taskFactory: () => Promise<void>): Promise<void> {
+    // Bug 26 fix: 防止同一 taskId 被重复提交
+    if (this.running.has(taskId)) {
+      console.warn(`[TaskQueue] Task ${taskId} already running, rejecting duplicate submit`);
+      return;
+    }
+    if (this.pending.some(e => e.taskId === taskId)) {
+      console.warn(`[TaskQueue] Task ${taskId} already pending, rejecting duplicate submit`);
+      return;
+    }
     this.pending.push({ taskId, factory: taskFactory });
     // 触发 drain（非阻塞）
     this.drain();

@@ -106,7 +106,7 @@ export abstract class BaseAgent {
    */
   private startProgressHeartbeat(): NodeJS.Timeout {
     let elapsed = 0;
-    return setInterval(() => {
+    const timer = setInterval(() => {
       elapsed += 3;
       if (this.bus) {
         this.bus.publish('lifecycle', {
@@ -119,6 +119,9 @@ export abstract class BaseAgent {
         }).catch(() => {});
       }
     }, 3000);
+    // Bug 42 fix: 防止 heartbeat 阻止 Node.js 进程退出
+    timer.unref();
+    return timer;
   }
 
   // ----- Lifecycle & Processing -----
@@ -128,30 +131,35 @@ export abstract class BaseAgent {
     return await this.act(message);
   }
 
-  // ----- Event Emission -----
   public emitEvent(
     action: EventAction,
     payload: Record<string, any> = {},
     targetAgent?: string,
     taskId?: string
-  ): BaseEvent {
-    // Create base event
+  ): { event: BaseEvent; publishPromise: Promise<void> } {
+    // Bug 16 fix: 分离事件元数据和 payload，避免 payload 自引用导致数据冗余
+    // 从 caller payload 中提取事件级元数据，其余保留为纯数据 payload
+    const { emotion: payloadEmotion, intensity: payloadIntensity, status: payloadStatus, payload: nestedPayload, task_id: payloadTaskId, ...cleanPayload } = payload;
+
     const eventBase = {
       timestamp: new Date(),
       source_agent: this.role,
       target_agent: targetAgent || null,
       action: action,
-      emotion: payload.emotion || EmotionType.NEUTRAL,
-      intensity: payload.intensity || 0.5,
-      status: payload.status || 'success',
-      ...payload,
-      payload: payload.payload !== undefined ? payload.payload : payload,
-      task_id: taskId || payload.task_id || randomUUID(),
+      emotion: payloadEmotion ?? EmotionType.NEUTRAL,
+      intensity: payloadIntensity ?? 0.5,
+      status: payloadStatus ?? 'success',
+      // 展开 clean payload 到顶层（保持向后兼容：ExecutionEvent 等需要 tool_name 在顶层）
+      ...cleanPayload,
+      // payload 字段存储纯数据，不再复制 cleanPayload 导致双重存储 (Bug 56 fix)
+      payload: nestedPayload !== undefined ? nestedPayload : {},
+      task_id: taskId || payloadTaskId || randomUUID(),
     };
     
     const event = eventBase as unknown as BaseEvent;
-
-    // Publish to the bus if available
+    
+    // Publish to the bus if available, returning the Promise
+    let publishPromise = Promise.resolve();
     if (this.bus) {
       let topic: 'legislation' | 'execution' | 'judiciary' | 'lifecycle';
       switch (this.branch) {
@@ -167,11 +175,9 @@ export abstract class BaseAgent {
         default:
           topic = 'lifecycle';
       }
-      this.bus.publish(topic, event).catch((err) => {
-        console.error(`[BaseAgent] Failed to emit event to bus: ${err}`);
-      });
+      publishPromise = this.bus.publish(topic, event);
     }
 
-    return event;
+    return { event, publishPromise };
   }
 }

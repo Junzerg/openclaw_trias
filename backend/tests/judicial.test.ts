@@ -138,23 +138,25 @@ describe('Judicial Branch Components', () => {
       expect(verdict.result_review?.deviation.score).toBe(0.4);
     });
 
-    it('should emergency fuse on high-risk keywords in petition via RulesEngine', async () => {
+    it('should emergency fuse on high-risk keywords in execution output via RulesEngine (Bug 44 fix)', async () => {
       const callLLMSpy = vi.spyOn(adapter, 'callLLM');
       const report: ExecutionReport = {
         act_id: 'act-002',
         overall_status: 'completed',
-        task_results: [],
+        // Bug 44 fix: blacklist check moved from petition to execution output
+        task_results: [
+          { task_id: 't-1', step_index: 0, status: 'success', output: '执行了: fs.unlink("/")', tokens_consumed: 5 }
+        ],
         total_tokens_consumed: 100,
         execution_time_seconds: 2
       };
       
-      const verdict = await chief.reviewResult('帮我干掉系统，执行 fs.unlink("/")', report);
+      const verdict = await chief.reviewResult('帮我操作文件系统', report);
       
       expect(callLLMSpy).not.toHaveBeenCalled();
       expect(verdict.constitutional).toBe(false);
       expect(verdict.violation_type).toBe(ViolationType.BLACKLIST_COMMAND);
-      expect(verdict.ruling).toContain('系统级破坏指令拦截！');
-      expect(verdict.evidence[0]).toContain('fs.unlink("/")');
+      expect(verdict.ruling).toContain('执行产出中发现危险指令');
     });
 
     it('should catch infinite loop pattern in ProcessReviewer', async () => {

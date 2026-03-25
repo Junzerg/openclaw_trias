@@ -3,6 +3,7 @@ import { EventAction } from '../../schemas/events';
 import { ExecutionTask, TaskResult } from '../../schemas/act';
 import { OpenClawAdapter } from '../../openclaw/adapter';
 import { MessageBus } from '../../bus/message-bus';
+import { validateCode, truncateOutput } from '../../openclaw/sandbox';
 
 /** Supported languages for code execution. */
 const SUPPORTED_LANGUAGES = ['python', 'javascript', 'bash'] as const;
@@ -79,20 +80,51 @@ ${description}
    * 3. If anything fails, fallback: treat the entire output as Python code.
    */
   public _extractCodeFromLLM(content: string): { language: string; code: string; valid: boolean } {
-    try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+    // 1. Try markdown json block
+    const mdMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+    if (mdMatch) {
+      try {
+        const parsed = JSON.parse(mdMatch[1]);
         if (parsed.code) {
           const lang: SupportedLanguage = (SUPPORTED_LANGUAGES as readonly string[]).includes(parsed.language)
             ? (parsed.language as SupportedLanguage)
             : 'python';
           return { language: lang, code: parsed.code, valid: true };
         }
+      } catch {
+        // Fall through
       }
-    } catch {
-      // JSON.parse failed — fall through to fallback
     }
+
+    // 2. Try counting brackets from the first '{' (Bug 57 fix: not greedy regex)
+    const startIdx = content.indexOf('{');
+    if (startIdx !== -1) {
+      let depth = 0;
+      let endIdx = -1;
+      for (let i = startIdx; i < content.length; i++) {
+        if (content[i] === '{') depth++;
+        else if (content[i] === '}') depth--;
+        if (depth === 0) {
+          endIdx = i;
+          break;
+        }
+      }
+      
+      if (endIdx !== -1) {
+        try {
+          const parsed = JSON.parse(content.substring(startIdx, endIdx + 1));
+          if (parsed.code) {
+            const lang: SupportedLanguage = (SUPPORTED_LANGUAGES as readonly string[]).includes(parsed.language)
+              ? (parsed.language as SupportedLanguage)
+              : 'python';
+            return { language: lang, code: parsed.code, valid: true };
+          }
+        } catch {
+          // Fall through
+        }
+      }
+    }
+
     // Fallback: treat the entire LLM output as Python code
     return { language: 'python', code: content, valid: false };
   }
@@ -118,6 +150,26 @@ ${description}
       // Phase 1: Code Generation
       const { language, code } = await this._generateCode(task.step.description);
 
+      // Phase 1.5: Security Pre-check (Task 3.6)
+      const validation = validateCode(code, language);
+      if (!validation.valid) {
+        this.emitEvent(EventAction.TOOL_CALL, {
+          tool_name: task.step.required_skill,
+          step_index: task.step.index,
+          status: 'failed',
+          error: `安全检查未通过: ${validation.reason}`,
+        }, undefined, task.task_id);
+
+        return {
+          task_id: task.task_id,
+          step_index: task.step.index,
+          status: 'failed',
+          output: '',
+          error: `安全检查未通过: ${validation.reason}`,
+          tokens_consumed: 0,
+        };
+      }
+
       // Phase 2: Code Execution
       const execResult = await this.adapter.executeCode(code, language, this.modelRef);
 
@@ -128,12 +180,13 @@ ${description}
         status: success ? 'success' : 'failed',
       }, undefined, task.task_id);
 
+      // Phase 3: Output Truncation (Task 3.6)
       return {
         task_id: task.task_id,
         step_index: task.step.index,
         status: success ? 'success' : 'failed',
         output: success
-          ? (execResult.stdout || '')
+          ? truncateOutput(execResult.stdout || '')
           : (execResult.stderr || execResult.stdout || ''),
         error: success ? undefined : (execResult.stderr || execResult.stdout || 'Unknown execution error'),
         tokens_consumed: task.step.estimated_tokens,

@@ -293,8 +293,9 @@ describe('Phase 3 Pipeline Integration (Task 3.7)', () => {
 
     const result = await gov.receivePetition('生成代码并搜索文档', 1);
 
-    expect(result).toContain('已交付');
-    expect(result).toContain('partial');
+    expect(result).not.toContain('已交付');
+    // Bug 49 fix: partial is treated as failed, so it exhausts retries and returns 未通过
+    expect(result).toContain('未通过');
   });
 
   // ── Retry path: execution fails → unconstitutional → retry → succeed ──
@@ -311,12 +312,12 @@ describe('Phase 3 Pipeline Integration (Task 3.7)', () => {
     vi.spyOn(gov.speaker, 'generateAct').mockResolvedValue(act);
     vi.spyOn(gov.president, 'evaluateAct').mockResolvedValue(null);
 
-    // Attempt 1: execution fails; Attempt 2: execution succeeds
+    // Attempt 1: execution has partial failure (reaches ChiefJustice); Attempt 2: execution succeeds
     vi.spyOn(gov.executionEngine, 'executeAct').mockImplementation(async () => {
       pipelineAttempt++;
       if (pipelineAttempt === 1) {
         return {
-          act_id: act.act_id, overall_status: 'failed' as const,
+          act_id: act.act_id, overall_status: 'partial' as const,
           task_results: [{
             task_id: act.act_id, step_index: 0, status: 'failed' as const,
             output: '', error: 'Runtime error', tokens_consumed: 0,
@@ -353,7 +354,7 @@ describe('Phase 3 Pipeline Integration (Task 3.7)', () => {
 
     const result = await gov.receivePetition('Test', 2); // maxRetries=2
 
-    expect(pipelineAttempt).toBe(2);
+    expect(pipelineAttempt).toBe(3);
     expect(reviewAttempt).toBe(2);
     expect(result).toContain('已交付');
   });

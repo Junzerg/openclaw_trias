@@ -172,8 +172,21 @@ export async function runPetition(
 
     const result = await state.government.receivePetition(prompt, undefined, taskId);
 
+    // Bug 39+51 fix: receivePetition NEVER throws — it catches all errors and returns
+    // error strings. Detect those robustly (not just Chinese prefixes) and mark as FAILED.
+    // Key indicators: 系统级异常, 重试后仍未通过, 流水线已中止, 未完成
+    const isSystemFailure = typeof result === 'string' && (
+      result.startsWith('系统级异常') ||
+      result.includes('次重试后仍未通过') ||
+      result.includes('流水线已中止') ||
+      result.includes('未完成') ||
+      // Catch English-language exceptions from transport/OpenClawError
+      /^(Error|OpenClawError|Transport):/i.test(result) ||
+      // Fallback: if result doesn't start with '法案' (the success prefix), treat as failure
+      (!result.startsWith('法案') && result.length < 200 && !result.includes('已交付'))
+    );
     await state.taskStore.updateTask(taskId, {
-      status: TaskStatus.COMPLETED,
+      status: isSystemFailure ? TaskStatus.FAILED : TaskStatus.COMPLETED,
       result: result ?? 'Pipeline completed',
     });
   } catch (error) {

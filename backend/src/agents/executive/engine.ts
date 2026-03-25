@@ -120,7 +120,7 @@ export class ExecutionEngine {
     }
 
     const task: ExecutionTask = {
-      task_id: actId,
+      task_id: randomUUID(),
       act_id: actId,
       step: step,
       assigned_to: executor.role,

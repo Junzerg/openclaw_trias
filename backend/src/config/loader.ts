@@ -11,18 +11,18 @@ const PROJECT_ROOT = resolve(__dirname, '../../..');
 const CONSTITUTION_PATH = join(PROJECT_ROOT, 'config', 'constitution.yaml');
 const SOULS_DIR = join(PROJECT_ROOT, 'config', 'souls');
 
-let _cachedConstitution: ConstitutionConfig | null = null;
+const _cachedConstitutions = new Map<string, ConstitutionConfig>();
 const _soulCache = new Map<string, string>();
 
 /**
  * Parses and returns the constitution configuration. Results are cached.
  */
 export function loadConstitution(configDir?: string): ConstitutionConfig {
-  if (_cachedConstitution && !configDir) {
-    return _cachedConstitution;
-  }
-
   const targetPath = configDir ? join(configDir, 'constitution.yaml') : CONSTITUTION_PATH;
+  
+  if (_cachedConstitutions.has(targetPath)) {
+    return _cachedConstitutions.get(targetPath)!;
+  }
 
   if (!existsSync(targetPath)) {
     throw new Error(`Constitution file not found at ${targetPath}`);
@@ -31,8 +31,9 @@ export function loadConstitution(configDir?: string): ConstitutionConfig {
   const fileContent = readFileSync(targetPath, 'utf-8');
   const parsedYaml = parse(fileContent);
   
-  _cachedConstitution = ConstitutionConfigSchema.parse(parsedYaml);
-  return _cachedConstitution;
+  const config = ConstitutionConfigSchema.parse(parsedYaml);
+  _cachedConstitutions.set(targetPath, config);
+  return config;
 }
 
 /**
@@ -78,7 +79,7 @@ export function loadSoul(role: string): string {
  * Force clear caches (useful for tests)
  */
 export function clearConfigCache() {
-  _cachedConstitution = null;
+  _cachedConstitutions.clear();
   _soulCache.clear();
 }
 
