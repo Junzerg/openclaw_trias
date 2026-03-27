@@ -231,9 +231,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
             : statement;
         } else if (source_agent === 'speaker') {
           if (evAction === 'order') {
-            round.speaker_intervention = round.speaker_intervention
-              ? round.speaker_intervention + '\n\n---\n' + statement
-              : statement;
+            // Use replace instead of append to prevent duplicates from concurrent WS + history load
+            round.speaker_intervention = statement;
           }
         }
       } else if (evAction === 'brawl') {

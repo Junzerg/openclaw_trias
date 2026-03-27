@@ -180,7 +180,7 @@ export function createRouter(): Router {
       const conflictScores: number[] = [];
 
       for (const row of eventRows) {
-        if (!['propose', 'order', 'brawl'].includes(row.action)) continue;
+        if (!['propose', 'debate', 'order', 'brawl'].includes(row.action)) continue;
 
         let payload: Record<string, unknown>;
         try {

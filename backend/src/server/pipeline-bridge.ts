@@ -59,6 +59,19 @@ export function serializeEvent(event: BaseEvent): Record<string, unknown> {
     base.target_agent = event.target_agent;
   }
 
+  // Bug fix: emitEvent 通过 ...cleanPayload 将 statement/round_number/conflict_score 等
+  // 展开到事件顶层，而非 event.payload 内部。必须先将这些顶层扩展字段复制到 base 中。
+  const KNOWN_BASE_KEYS = new Set([
+    'action', 'source_agent', 'target_agent', 'emotion', 'intensity',
+    'timestamp', 'task_id', 'payload', 'status',
+  ]);
+  const anyEvent = event as Record<string, unknown>;
+  for (const [key, value] of Object.entries(anyEvent)) {
+    if (!KNOWN_BASE_KEYS.has(key) && !(key in base)) {
+      base[key] = value;
+    }
+  }
+
   // 展开 payload 到顶层（Python model_dump 行为）
   // payload 字段优先级低于基础字段（不得覆盖 action/source_agent 等）
   if (event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload)) {

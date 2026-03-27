@@ -55,6 +55,8 @@ export class ParliamentScene extends Phaser.Scene {
         return this.conservativeMP;
     }
 
+    private activeBubbles: Map<Phaser.GameObjects.Sprite, Phaser.GameObjects.Text> = new Map();
+
     // ──────────────────────────────────────────────
     //  Typewriter text bubble
     // ──────────────────────────────────────────────
@@ -65,22 +67,47 @@ export class ParliamentScene extends Phaser.Scene {
         charDelay: number = 40
     ): Promise<void> {
         return new Promise((resolve) => {
+            // Destroy any existing bubble for this speaker
+            if (this.activeBubbles.has(sourceSprite)) {
+                this.activeBubbles.get(sourceSprite)?.destroy();
+                this.activeBubbles.delete(sourceSprite);
+            }
+
+            // Target max 5 seconds for typing, adjusting charDelay
+            if (text.length > 0) {
+                charDelay = Math.min(charDelay, Math.floor(5000 / text.length));
+                // Clamp min delay to 2ms so the engine handles it gracefully
+                charDelay = Math.max(charDelay, 2); 
+            }
+
             const x = sourceSprite.x;
             const y = sourceSprite.y - (sourceSprite.displayHeight / 2) - 40;
 
             const textObj = this.add.text(x, y, '', {
-                fontSize: '18px',
+                fontSize: '14px',
                 color: '#000000',
                 backgroundColor: type === 'propose' ? '#ffffff' : '#e0f7fa',
                 padding: { x: 10, y: 10 },
-                wordWrap: { width: 250, useAdvancedWrap: true }
+                wordWrap: { width: 320, useAdvancedWrap: true }
             }).setOrigin(0.5, 1).setDepth(100);
+
+            this.activeBubbles.set(sourceSprite, textObj);
 
             const textLength = text.length;
             let i = 0;
+            let currentText = "";
+            const MAX_CHARS_ON_SCREEN = 250;
+
             this.time.addEvent({
                 callback: () => {
-                    textObj.text += text[i];
+                    currentText += text[i];
+                    // Keep sliding window of max 100 characters
+                    if (currentText.length > MAX_CHARS_ON_SCREEN) {
+                        textObj.text = currentText.slice(-MAX_CHARS_ON_SCREEN);
+                    } else {
+                        textObj.text = currentText;
+                    }
+                    
                     if (i % 2 === 0) soundManager.play('typewriter', { volume: 1.0 });
                     i++;
                 },
@@ -88,16 +115,8 @@ export class ParliamentScene extends Phaser.Scene {
                 delay: charDelay
             });
 
-            this.time.delayedCall(4000 + (textLength * charDelay), () => {
-                this.tweens.add({
-                    targets: textObj,
-                    alpha: 0,
-                    duration: 500,
-                    onComplete: () => textObj.destroy()
-                });
-            });
-
-            this.time.delayedCall(textLength * charDelay + 300, resolve);
+            // Resolve when typing finishes; bubble remains indefinitely until next speech
+            this.time.delayedCall(textLength * charDelay + 100, resolve);
         });
     }
 

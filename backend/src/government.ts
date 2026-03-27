@@ -193,7 +193,9 @@ export class CyberGovernment {
 
     let voteResult = await this.speaker.callVote(
       debateResult.final_proposal,
-      [this.radicalMp, this.conservativeMp]
+      [this.radicalMp, this.conservativeMp],
+      debateResult.rounds.length + 1,
+      billId
     );
 
     if (!voteResult.passed) {

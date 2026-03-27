@@ -8,6 +8,7 @@ import type { ConservativeMP } from './conservative-mp';
 import { DebateEngine, VotingMachine, DebateConfig, DebateResult, VoteResult, Voter } from './debate';
 
 import { Act, ActStep, DebateRecord, ActVoteRecord } from '../../schemas/act';
+import { EventAction } from '../../schemas/events';
 
 export class Speaker extends BaseAgent {
   private _currentPetition: string | null = null;
@@ -60,10 +61,17 @@ export class Speaker extends BaseAgent {
   /**
    * 发起表决。
    */
-  async callVote(proposal: string, voters: Voter[]): Promise<VoteResult> {
+  async callVote(proposal: string, voters: Voter[], voteRound: number = 99, taskId?: string): Promise<VoteResult> {
     this.requirePermission(Permission.PLAN);
+
+    // Announce the start of voting
+    this.emitEvent(EventAction.ORDER, {
+      statement: `辩论结束，现对最终法案进行表决。请各位议员投票。`,
+      round_number: voteRound
+    }, undefined, taskId);
+
     const machine = new VotingMachine();
-    return await machine.tally(proposal, voters);
+    return await machine.tally(proposal, voters, voteRound, taskId);
   }
 
   /**

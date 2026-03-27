@@ -15,9 +15,15 @@ export interface DebateConfig {
   consensus_threshold: number; // 达成共识阈值
 }
 
+export interface VoteOutcome {
+  voteValue: boolean;
+  reason: string;
+}
+
 export interface Voter {
   role: string;
-  vote(proposal: string): Promise<boolean>;
+  vote(proposal: string): Promise<VoteOutcome>;
+  emitEvent?(action: EventAction, payload?: Record<string, unknown>, targetAgent?: string, taskId?: string): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -214,15 +220,23 @@ export class DebateEngine {
 // ---------------------------------------------------------------------------
 
 export class VotingMachine {
-  async tally(proposal: string, voters: Voter[]): Promise<VoteResult> {
+  async tally(proposal: string, voters: Voter[], voteRound: number = 99, taskId?: string): Promise<VoteResult> {
     const records: VoteRecord[] = [];
     let ayes = 0;
     let nays = 0;
 
     for (const voter of voters) {
-      const voteValue = await voter.vote(proposal);
-      records.push({ voter_role: voter.role, vote: voteValue });
-      if (voteValue) {
+      const outcome = await voter.vote(proposal);
+      records.push({ voter_role: voter.role, vote: outcome.voteValue });
+      
+      if (typeof voter.emitEvent === 'function') {
+        voter.emitEvent(EventAction.PROPOSE, {
+           statement: `[VOTING] 投票已决：我投**${outcome.voteValue ? '赞成票' : '反对票'}**！\n\n${outcome.reason}`,
+           round_number: voteRound
+        }, undefined, taskId);
+      }
+
+      if (outcome.voteValue) {
         ayes++;
       } else {
         nays++;
