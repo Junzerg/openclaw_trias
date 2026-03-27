@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useAppState, useAppDispatch } from '../../contexts/AppContext';
 import { useApi } from '../../hooks/useApi';
 import { DebateRoundCard } from './DebateRoundCard';
+import { ConflictScoreChart } from './ConflictScoreChart';
 import './Debate.css';
 
 export function DebateLogPanel() {
@@ -45,6 +46,7 @@ export function DebateLogPanel() {
   if (debate.rounds.length === 0) {
     return (
       <div className="debate-log-panel">
+        <ConflictScoreChart />
         <div className="debate-empty-state">
           <div className="status-dot" style={{ backgroundColor: 'var(--color-accent-blue)', marginBottom: 'var(--spacing-md)' }} />
           <div>Waiting for debate to begin...</div>
@@ -55,6 +57,8 @@ export function DebateLogPanel() {
 
   return (
     <div className="debate-log-panel">
+      <ConflictScoreChart />
+      
       {debate.rounds.map((round) => (
         <DebateRoundCard 
           key={`round-${round.round_number}`} 
