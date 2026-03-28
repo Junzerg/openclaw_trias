@@ -34,6 +34,7 @@ export const BaseEventSchema = z.object({
   intensity: z.number().min(0.0).max(1.0).default(0.5).describe('情绪强度 0~1'),
   payload: z.record(z.string(), z.any()).default({}).describe('自由扩展字段'),
   task_id: z.string().optional().describe('关联的任务 ID'),
+  event_id: z.number().optional().describe('Ring Buffer 递增序号，用于断线重连补发'),
 });
 export type BaseEvent = z.infer<typeof BaseEventSchema>;
 

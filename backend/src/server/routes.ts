@@ -14,6 +14,9 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'node:crypto';
 import { AppState } from './app';
 import { runPetition } from './pipeline-bridge';
+import { invalidateSoul, listSoulNames, writeSoulFile, SOULS_DIR } from '../config/loader';
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   PetitionRequestSchema,
   type PetitionResponse,
@@ -301,6 +304,79 @@ export function createRouter(): Router {
         created_at: verdictRow.created_at,
       };
       res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // ─── Soul Config API (Task 4.9) ─────────────────────────────
+
+  /**
+   * 安全校验：名称只允许字母、数字和下划线，杜绝路径穿越。
+   * SOUL_TEMPLATE 也是合法名称。
+   */
+  const SAFE_NAME_RE = /^[A-Za-z0-9_]+$/;
+
+  function isValidSoulName(name: string): boolean {
+    return SAFE_NAME_RE.test(name) && name.length > 0 && name.length <= 64;
+  }
+
+  // GET /config/souls — 列出所有 soul 文件名
+  router.get('/config/souls', (_req: Request, res: Response, next: NextFunction): void => {
+    try {
+      const names = listSoulNames();
+      res.json({ souls: names });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /config/souls/:name — 读取单个 soul 文件的 Markdown 内容
+  router.get('/config/souls/:name', (req: Request<{ name: string }>, res: Response, next: NextFunction): void => {
+    try {
+      const { name } = req.params;
+
+      if (!isValidSoulName(name)) {
+        res.status(400).json({ error: 'Bad Request', detail: 'Invalid soul name. Only alphanumerics and underscores allowed.' });
+        return;
+      }
+
+      const filePath = join(SOULS_DIR, `${name}.md`);
+      if (!existsSync(filePath)) {
+        res.status(404).json({ error: 'Not Found', detail: `Soul file not found: ${name}` });
+        return;
+      }
+
+      const content = readFileSync(filePath, 'utf-8');
+      res.json({ name, content });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // PUT /config/souls/:name — 覆写 soul 文件并使缓存失效
+  router.put('/config/souls/:name', (req: Request<{ name: string }>, res: Response, next: NextFunction): void => {
+    try {
+      const { name } = req.params;
+
+      if (!isValidSoulName(name)) {
+        res.status(400).json({ error: 'Bad Request', detail: 'Invalid soul name. Only alphanumerics and underscores allowed.' });
+        return;
+      }
+
+      const { content } = req.body as { content?: string };
+      if (typeof content !== 'string') {
+        res.status(400).json({ error: 'Bad Request', detail: 'Request body must include a "content" string field.' });
+        return;
+      }
+
+      // 写入磁盘
+      writeSoulFile(name, content);
+
+      // 使内存缓存失效 — 下次 loadSoul() 会从磁盘重新加载
+      invalidateSoul(name);
+
+      res.json({ ok: true, name, message: `Soul "${name}" updated successfully. Cache invalidated.` });
     } catch (err) {
       next(err);
     }

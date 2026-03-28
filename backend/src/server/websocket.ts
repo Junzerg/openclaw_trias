@@ -181,6 +181,49 @@ export function handleWebSocketConnection(
         return;
       }
 
+      // ─── Task 4.8: replay 断线重连事件补发 ─────────────────────────
+      if (action === 'replay') {
+        try {
+          const replayData = payload.data;
+          if (
+            !replayData ||
+            typeof replayData !== 'object' ||
+            Array.isArray(replayData)
+          ) {
+            console.debug('[WS] replay: invalid data format (task=%j)', taskId);
+            return;
+          }
+
+          const afterEventId = (replayData as Record<string, unknown>).after_event_id;
+          if (typeof afterEventId !== 'number' || !Number.isFinite(afterEventId)) {
+            console.debug('[WS] replay: invalid after_event_id (task=%j): %j', taskId, afterEventId);
+            return;
+          }
+
+          const missedEvents = manager.getEventsAfter(taskId, afterEventId);
+          console.log(
+            '[WS] Replay requested (task=%j): after_event_id=%d, replaying %d events',
+            taskId,
+            afterEventId,
+            missedEvents.length,
+          );
+
+          // 逐条发送给请求的 client（不是广播！），Fire and Forget 防阻塞
+          for (const event of missedEvents) {
+            if (ws.readyState !== ws.OPEN) break; // 中途断开则立即停止
+
+            ws.send(JSON.stringify(event.payload), (err) => {
+              if (err) {
+                console.debug('[WS] Replay send failed (task=%j): %s', taskId, err.message);
+              }
+            });
+          }
+        } catch (err) {
+          console.error('[WS] Replay handler error (task=%j):', taskId, err);
+        }
+        return;
+      }
+
       // ─── debug_* 调试指令 ───────────────────────────────────────
       if (action.startsWith('debug_')) {
         // 将 debug_brawl → brawl, debug_vote → vote, etc.

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Phaser from 'phaser';
 import { GameConfig } from './game/config';
 import { useWebSocket, wsEventBus } from './hooks/useWebSocket';
@@ -12,6 +12,7 @@ import { DebateLogPanel } from './components/debate/DebateLogPanel';
 import { ResultPanel } from './components/result/ResultPanel';
 import { TokenDashboard } from './components/metrics/TokenDashboard';
 import { ConflictScoreChart } from './components/debate/ConflictScoreChart';
+import { SoulEditor } from './components/config/SoulEditor';
 
 import './styles/design-system.css';
 import './App.css';
@@ -38,14 +39,17 @@ function AppContent() {
   }, [activeTaskId, initialTaskId, dispatch]);
 
   const taskIdToUse = activeTaskId || initialTaskId;
-  const { isConnected, taskStatus } = useWebSocket(taskIdToUse);
+  const { isConnected, connectionState, taskStatus } = useWebSocket(taskIdToUse);
+
+  const [viewMode, setViewMode] = useState<'debate' | 'config'>('debate');
 
   const sceneManagerRef = useRef<SceneManager | null>(null);
   const eventMapperRef = useRef<EventMapper | null>(null);
 
   useEffect(() => {
     dispatch({ type: 'SET_CONNECTION', isConnected });
-  }, [isConnected, dispatch]);
+    dispatch({ type: 'SET_WS_STATE', wsState: connectionState });
+  }, [isConnected, connectionState, dispatch]);
 
   useEffect(() => {
     if (gameRef.current && !gameInstance.current) {
@@ -94,6 +98,8 @@ function AppContent() {
 
   return (
     <AppShell 
+      viewMode={viewMode}
+      onViewModeChange={setViewMode}
       leftPanel={
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto', overflowX: 'hidden' }}>
           <PetitionPanel />
@@ -110,7 +116,11 @@ function AppContent() {
       }
       bottomPanel={isResultPhase ? <ResultPanel /> : <DebateLogPanel />}
     >
-      <div ref={gameRef} style={{ width: '100%', height: '100%' }} />
+      {viewMode === 'config' ? (
+        <SoulEditor />
+      ) : (
+        <div ref={gameRef} style={{ width: '100%', height: '100%' }} />
+      )}
     </AppShell>
   );
 }

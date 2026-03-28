@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   PieChart, Pie, Cell,
   LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -84,7 +84,6 @@ const renderPieLabel = ({ name, percent }: { name?: string; percent?: number }):
 export const TokenDashboard: React.FC = () => {
   const { tokens } = useAppState();
   const hasData = tokens.total > 0;
-  const [expanded, setExpanded] = useState(false);
 
   // Pie chart data
   const pieData = useMemo<PieDataEntry[]>(() => {
@@ -100,33 +99,16 @@ export const TokenDashboard: React.FC = () => {
 
   return (
     <div className="token-dashboard">
-      {/* Header — clickable to toggle expand */}
-      <div
-        className="token-dashboard-header"
-        onClick={() => hasData && setExpanded(!expanded)}
-        style={{ cursor: hasData ? 'pointer' : 'default' }}
-      >
+      {/* Header */}
+      <div className="token-dashboard-header">
         <span className="dashboard-icon">⚡</span>
         <h3>Token</h3>
         {hasData && (
-          <>
-            <span className="token-header-total">{formatTokenCount(tokens.total)}</span>
-            <span className="token-expand-arrow">{expanded ? '▾' : '▸'}</span>
-          </>
+          <span className="token-header-total">{formatTokenCount(tokens.total)}</span>
         )}
       </div>
 
-      {/* Compact inline summary — always visible when data exists */}
-      {hasData && !expanded && (
-        <div className="token-inline-summary">
-          <span className="token-inline-chip legislative">{formatTokenCount(tokens.legislative)}</span>
-          <span className="token-inline-chip executive">{formatTokenCount(tokens.executive)}</span>
-          <span className="token-inline-chip judicial">{formatTokenCount(tokens.judicial)}</span>
-        </div>
-      )}
-
-      {/* Expanded charts */}
-      {hasData && expanded && (
+      {hasData && (
         <>
           {/* Summary Cards */}
           <div className="token-summary-grid">
@@ -270,3 +252,4 @@ export const TokenDashboard: React.FC = () => {
     </div>
   );
 };
+

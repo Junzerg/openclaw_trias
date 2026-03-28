@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, ReactNode } from 'react';
 import type { WSEventPayload } from '../types/backend';
+import type { WsConnectionState } from '../hooks/useWebSocket';
 
 export interface TaskSummary {
   taskId: string;
@@ -19,6 +20,7 @@ export interface AppState {
   activeTaskId: string | null;
   connection: {
     isConnected: boolean;
+    wsState: WsConnectionState;
     reconnectAttempts: number;
     lastEventId: number;
   };
@@ -58,6 +60,7 @@ export interface AppState {
 export type AppAction =
   | { type: 'SET_ACTIVE_TASK'; taskId: string }
   | { type: 'SET_CONNECTION'; isConnected: boolean }
+  | { type: 'SET_WS_STATE'; wsState: WsConnectionState }
   | { type: 'PETITION_SUBMIT'; prompt: string }
   | { type: 'PETITION_SUCCESS'; taskId: string }
   | { type: 'PETITION_ERROR'; error: string }
@@ -74,7 +77,7 @@ export type AppAction =
 
 const initialState: AppState = {
   activeTaskId: null,
-  connection: { isConnected: false, reconnectAttempts: 0, lastEventId: 0 },
+  connection: { isConnected: false, wsState: 'offline' as WsConnectionState, reconnectAttempts: 0, lastEventId: 0 },
   petition: { prompt: '', status: 'idle', taskId: null },
   tasks: [],
   debate: { rounds: [], conflictScores: [], currentRound: 0, thinkingAgent: null },
@@ -93,6 +96,15 @@ function appReducer(state: AppState, action: AppAction): AppState {
         connection: {
           ...state.connection,
           isConnected: action.isConnected,
+        },
+      };
+    case 'SET_WS_STATE':
+      return {
+        ...state,
+        connection: {
+          ...state.connection,
+          wsState: action.wsState,
+          isConnected: action.wsState === 'connected',
         },
       };
     case 'RESET':

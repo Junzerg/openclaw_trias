@@ -79,6 +79,8 @@ export interface IConnectionManager {
   broadcast(taskId: string, payload: Record<string, unknown>): Promise<void>;
   getConnectionCount(taskId: string): number;
   closeAll(): void;
+  /** Task 4.8: 查询断线期间遗漏的事件用于补发 */
+  getEventsAfter(taskId: string, afterEventId: number): import('./ws-manager').BufferedEvent[];
 }
 
 // ─── AppState ──────────────────────────────────────────────────

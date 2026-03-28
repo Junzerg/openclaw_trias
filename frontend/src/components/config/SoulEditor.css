@@ -1,0 +1,332 @@
+/* ═══════════════════════════════════════════════════════════════
+   Soul Editor — Task 4.9: Hot-Edit Panel Styles
+   Uses design-system.css tokens for consistency.
+   ═══════════════════════════════════════════════════════════════ */
+
+.soul-editor {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  overflow: hidden;
+}
+
+/* ─── Sidebar ───────────────────────────────────────────────── */
+.soul-sidebar {
+  width: 260px;
+  min-width: 220px;
+  background: var(--color-bg-panel);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.soul-sidebar-header {
+  padding: var(--spacing-md) var(--spacing-md) var(--spacing-sm);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.soul-sidebar-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--color-legislative), var(--color-accent-blue));
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: 0.02em;
+}
+
+.soul-count {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+  opacity: 0.6;
+}
+
+.soul-list {
+  margin: 0;
+  padding: var(--spacing-xs) 0;
+  list-style: none;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.soul-list-item {
+  padding: var(--spacing-sm) var(--spacing-md);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-left: 3px solid transparent;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.soul-list-item:hover {
+  background: rgba(99, 102, 241, 0.08);
+  border-left-color: rgba(99, 102, 241, 0.3);
+}
+
+.soul-list-item.active {
+  background: rgba(99, 102, 241, 0.15);
+  border-left-color: var(--color-legislative);
+}
+
+.soul-list-item.active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 0;
+  box-shadow: inset 0 0 20px rgba(99, 102, 241, 0.05);
+  pointer-events: none;
+}
+
+.soul-list-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.soul-list-filename {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--color-text-secondary);
+  opacity: 0.5;
+}
+
+/* ─── Main Area ─────────────────────────────────────────────── */
+.soul-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* ─── Toolbar ───────────────────────────────────────────────── */
+.soul-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+  gap: var(--spacing-md);
+}
+
+.soul-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.soul-toolbar-icon {
+  font-size: 1rem;
+}
+
+.soul-toolbar-filename {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.soul-unsaved-badge {
+  font-size: 0.75rem;
+  color: var(--color-accent-yellow);
+  font-weight: 600;
+  animation: pulse-slow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.soul-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.soul-save-message {
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  animation: fade-in 0.3s ease;
+}
+
+.soul-save-message.success {
+  color: var(--color-accent-green);
+}
+
+.soul-save-message.error {
+  color: var(--color-accent-red);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.soul-save-btn {
+  padding: 6px 16px;
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(59, 130, 246, 0.2));
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.soul-save-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.4), rgba(59, 130, 246, 0.4));
+  border-color: var(--color-legislative);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.3);
+  transform: translateY(-1px);
+}
+
+.soul-save-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.soul-save-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ─── Editor Area ───────────────────────────────────────────── */
+.soul-editor-area {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Override react-md-editor for dark theme compatibility */
+.soul-editor-area .w-md-editor {
+  background-color: var(--color-bg-primary) !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--color-text-primary) !important;
+  height: 100% !important;
+}
+
+.soul-editor-area .w-md-editor-toolbar {
+  background: var(--color-bg-secondary) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+.soul-editor-area .w-md-editor-toolbar li > button {
+  color: var(--color-text-secondary) !important;
+}
+
+.soul-editor-area .w-md-editor-toolbar li > button:hover {
+  color: var(--color-text-primary) !important;
+  background: rgba(99, 102, 241, 0.15) !important;
+}
+
+.soul-editor-area .w-md-editor-content {
+  height: calc(100% - 29px) !important;
+}
+
+.soul-editor-area .w-md-editor-text-pre,
+.soul-editor-area .w-md-editor-text-input,
+.soul-editor-area .w-md-editor-text {
+  font-family: var(--font-mono) !important;
+  font-size: 14px !important;
+  line-height: 22px !important;
+  letter-spacing: normal !important;
+  color: var(--color-text-primary) !important;
+}
+
+.soul-editor-area .w-md-editor-preview {
+  background: var(--color-bg-panel) !important;
+  padding: var(--spacing-md) !important;
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+.soul-editor-area .wmde-markdown {
+  background: transparent !important;
+  color: var(--color-text-primary) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 0.88rem !important;
+}
+
+.soul-editor-area .wmde-markdown h1,
+.soul-editor-area .wmde-markdown h2,
+.soul-editor-area .wmde-markdown h3 {
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.soul-editor-area .wmde-markdown code {
+  background: rgba(99, 102, 241, 0.1) !important;
+  color: var(--color-legislative) !important;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.soul-editor-area .wmde-markdown blockquote {
+  border-left-color: var(--color-legislative) !important;
+  color: var(--color-text-secondary) !important;
+  background: rgba(99, 102, 241, 0.05) !important;
+}
+
+/* ─── Empty / Loading States ────────────────────────────────── */
+.soul-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: var(--spacing-md);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.soul-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(99, 102, 241, 0.15);
+  border-top-color: var(--color-legislative);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.soul-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: var(--spacing-md);
+  color: var(--color-text-secondary);
+  opacity: 0.6;
+}
+
+.soul-empty-icon {
+  font-size: 3rem;
+  opacity: 0.4;
+}
+
+.soul-empty p {
+  font-size: 0.9rem;
+  margin: 0;
+}

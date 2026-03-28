@@ -70,7 +70,7 @@ describe('Phase 3 Pipeline Integration (Task 3.7)', () => {
     vi.spyOn(gov.speaker, 'receivePetition').mockResolvedValue(undefined);
     vi.spyOn(gov.speaker, 'moderateDebate').mockResolvedValue({
       final_proposal: '编写 Python hello world',
-      debates: [],
+      rounds: [],
     } as any);
     vi.spyOn(gov.speaker, 'callVote').mockResolvedValue({
       proposal: '编写 Python hello world',
@@ -130,7 +130,7 @@ describe('Phase 3 Pipeline Integration (Task 3.7)', () => {
     });
 
     vi.spyOn(gov.speaker, 'receivePetition').mockResolvedValue(undefined);
-    vi.spyOn(gov.speaker, 'moderateDebate').mockResolvedValue({ final_proposal: '清理文件', debates: [] } as any);
+    vi.spyOn(gov.speaker, 'moderateDebate').mockResolvedValue({ final_proposal: '清理文件', rounds: [] } as any);
     vi.spyOn(gov.speaker, 'callVote').mockResolvedValue({
       proposal: '清理文件', records: [], ayes: 2, nays: 0, passed: true,
     } as any);
@@ -206,7 +206,7 @@ describe('Phase 3 Pipeline Integration (Task 3.7)', () => {
     });
 
     vi.spyOn(gov.speaker, 'receivePetition').mockResolvedValue(undefined);
-    vi.spyOn(gov.speaker, 'moderateDebate').mockResolvedValue({ final_proposal: 'Test', debates: [] } as any);
+    vi.spyOn(gov.speaker, 'moderateDebate').mockResolvedValue({ final_proposal: 'Test', rounds: [] } as any);
     vi.spyOn(gov.speaker, 'callVote').mockResolvedValue({
       proposal: 'Test', records: [], ayes: 2, nays: 0, passed: true,
     } as any);
@@ -266,7 +266,7 @@ describe('Phase 3 Pipeline Integration (Task 3.7)', () => {
     });
 
     vi.spyOn(gov.speaker, 'receivePetition').mockResolvedValue(undefined);
-    vi.spyOn(gov.speaker, 'moderateDebate').mockResolvedValue({ final_proposal: 'T', debates: [] } as any);
+    vi.spyOn(gov.speaker, 'moderateDebate').mockResolvedValue({ final_proposal: 'T', rounds: [] } as any);
     vi.spyOn(gov.speaker, 'callVote').mockResolvedValue({
       proposal: 'T', records: [], ayes: 2, nays: 0, passed: true,
     } as any);
@@ -305,7 +305,7 @@ describe('Phase 3 Pipeline Integration (Task 3.7)', () => {
     let pipelineAttempt = 0;
 
     vi.spyOn(gov.speaker, 'receivePetition').mockResolvedValue(undefined);
-    vi.spyOn(gov.speaker, 'moderateDebate').mockResolvedValue({ final_proposal: 'Test', debates: [] } as any);
+    vi.spyOn(gov.speaker, 'moderateDebate').mockResolvedValue({ final_proposal: 'Test', rounds: [] } as any);
     vi.spyOn(gov.speaker, 'callVote').mockResolvedValue({
       proposal: 'Test', records: [], ayes: 2, nays: 0, passed: true,
     } as any);
@@ -366,7 +366,7 @@ describe('Phase 3 Pipeline Integration (Task 3.7)', () => {
     const truncatedOutput = 'x'.repeat(50 * 1024) + '\n\n[OUTPUT TRUNCATED — exceeded 50KB limit]';
 
     vi.spyOn(gov.speaker, 'receivePetition').mockResolvedValue(undefined);
-    vi.spyOn(gov.speaker, 'moderateDebate').mockResolvedValue({ final_proposal: 'T', debates: [] } as any);
+    vi.spyOn(gov.speaker, 'moderateDebate').mockResolvedValue({ final_proposal: 'T', rounds: [] } as any);
     vi.spyOn(gov.speaker, 'callVote').mockResolvedValue({
       proposal: 'T', records: [], ayes: 2, nays: 0, passed: true,
     } as any);
@@ -454,7 +454,7 @@ describe('Phase 3 Pipeline Integration (Task 3.7)', () => {
     });
 
     // Short-circuit the rest of the pipeline after receivePetition
-    vi.spyOn(gov.speaker, 'moderateDebate').mockResolvedValue({ final_proposal: 'T', debates: [] } as any);
+    vi.spyOn(gov.speaker, 'moderateDebate').mockResolvedValue({ final_proposal: 'T', rounds: [] } as any);
     vi.spyOn(gov.speaker, 'callVote').mockResolvedValue({
       proposal: 'T', records: [], ayes: 2, nays: 0, passed: true,
     } as any);

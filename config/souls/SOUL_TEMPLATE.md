@@ -20,4 +20,4 @@
 ## System Prompt
 > 以下内容将在 Agent 初始化时注入 LLM 的 System Message。
 
-{完整的 System Prompt 文本}
+{完整的 System Prompt }

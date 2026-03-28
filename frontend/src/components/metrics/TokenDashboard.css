@@ -41,47 +41,6 @@
   -webkit-text-fill-color: transparent;
 }
 
-.token-expand-arrow {
-  font-size: 0.7rem;
-  color: var(--color-text-secondary);
-  margin-left: 4px;
-  transition: transform var(--transition-fast);
-}
-
-/* ─── Compact Inline Summary (collapsed state) ───────────────── */
-
-.token-inline-summary {
-  display: flex;
-  gap: var(--spacing-xs);
-}
-
-.token-inline-chip {
-  flex: 1;
-  text-align: center;
-  font-size: 0.65rem;
-  font-weight: 600;
-  font-family: var(--font-mono);
-  padding: 2px 0;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.token-inline-chip.legislative {
-  color: var(--color-legislative);
-  border-color: rgba(99, 102, 241, 0.2);
-}
-
-.token-inline-chip.executive {
-  color: var(--color-executive);
-  border-color: rgba(59, 130, 246, 0.2);
-}
-
-.token-inline-chip.judicial {
-  color: var(--color-judicial);
-  border-color: rgba(245, 158, 11, 0.2);
-}
-
 /* ─── Summary Cards ───────────────────────────────────────────── */
 
 .token-summary-grid {

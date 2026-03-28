@@ -2,14 +2,65 @@
  * WebSocket 连接管理器 — 翻译自 Python ws_manager.py。
  *
  * 按 task_id 分组管理 WebSocket 连接，支持广播事件到订阅同一任务的所有客户端。
+ *
+ * Task 4.8: 新增 Ring Buffer 事件缓冲 + event_id 全局递增计数器，
+ * 支持断线重连后自动补发遗漏事件。
  */
 
 import type { WebSocket } from 'ws';
 import type { IConnectionManager } from './app';
 
+/** Ring Buffer 中存储的历史事件条目 */
+export interface BufferedEvent {
+  event_id: number;
+  payload: Record<string, unknown>;
+}
+
+/** 每个 task 的 Ring Buffer 最大容量 */
+const RING_BUFFER_CAPACITY = 500;
+
 export class ConnectionManager implements IConnectionManager {
   /** task_id → 该任务的活跃 WebSocket 连接集合 */
   private readonly _connections = new Map<string, Set<WebSocket>>();
+
+  /**
+   * Task 4.8: 每个 task 的事件历史环形缓冲区。
+   * 当数组长度超过 RING_BUFFER_CAPACITY 时，旧事件从头部移出。
+   */
+  private readonly _historyBuffer = new Map<string, BufferedEvent[]>();
+
+  /**
+   * Task 4.8: 每个 task 的全局递增 event_id 计数器。
+   */
+  private readonly _eventCounters = new Map<string, number>();
+
+  /**
+   * Track last activity time for periodic cleanup to prevent memory leaks
+   */
+  private readonly _lastActive = new Map<string, number>();
+
+  constructor() {
+    // Sweep stale tasks (no activity for > 1 hour) every 30 minutes
+    setInterval(() => this.sweepStaleTasks(), 30 * 60 * 1000).unref();
+  }
+
+  private sweepStaleTasks(): void {
+    const now = Date.now();
+    for (const [taskId, lastTime] of this._lastActive.entries()) {
+      // If idle for more than 1 hour
+      if (now - lastTime > 60 * 60 * 1000) {
+        const conns = this._connections.get(taskId);
+        // Safely garbage collect if there are no active connections
+        if (!conns || conns.size === 0) {
+          this._historyBuffer.delete(taskId);
+          this._eventCounters.delete(taskId);
+          this._connections.delete(taskId);
+          this._lastActive.delete(taskId);
+          console.debug(`[WS Manager] Garbage collected stale task resources: ${taskId}`);
+        }
+      }
+    }
+  }
 
   /**
    * 注册一个 WebSocket 连接到指定 task_id。
@@ -33,6 +84,7 @@ export class ConnectionManager implements IConnectionManager {
     }
 
     conns.add(ws);
+    this._lastActive.set(taskId, Date.now());
   }
 
   /**
@@ -48,26 +100,62 @@ export class ConnectionManager implements IConnectionManager {
     conns.delete(ws);
 
     // 空 Set 必须从 Map 中移除，防止内存泄漏
+    // 注意：这里不要 delete buffer，保持 buffer 供后续重连使用
+    // buffer 将由 sweepStaleTasks 根据 1小时 TTL 自动回收
     if (conns.size === 0) {
       this._connections.delete(taskId);
     }
+    
+    this._lastActive.set(taskId, Date.now());
   }
 
   /**
    * 向指定 task_id 的所有连接广播事件。
    *
+   * Task 4.8 增强：
+   * 1. 为该 task 的 counter 加 1，生成 event_id
+   * 2. 将 event_id 注入到 payload 中
+   * 3. 将附带 event_id 的 payload 压入 Ring Buffer
+   * 4. Fire and Forget 广播给所有 client
+   *
    * 关键防雷 9: (慢读取者 DoS / Pipeline 死锁)
    * 我们 **绝不能 await** 每一个 socket 的发送完成！
-   * 如果攻击者制造“Slow Reader”（故意不消费 TCP 缓冲区），
+   * 如果攻击者制造"Slow Reader"（故意不消费 TCP 缓冲区），
    * ws.send 的回调将永远卡住，导致 Promise 泄漏并挂起核心业务 Pipeline 的执行。
    */
   async broadcast(taskId: string, payload: Record<string, unknown>): Promise<void> {
+    this._lastActive.set(taskId, Date.now()); // Update activity timestamp
+
+    // ─── Task 4.8: event_id 递增 & 注入 ───────────────────────────
+    const currentCounter = (this._eventCounters.get(taskId) ?? 0) + 1;
+    this._eventCounters.set(taskId, currentCounter);
+
+    // 注入 event_id 到 payload 中（不修改原始对象，创建新引用）
+    const enrichedPayload: Record<string, unknown> = { ...payload, event_id: currentCounter };
+
+    // ─── Task 4.8: 写入 Ring Buffer ────────────────────────────────
+    let buffer = this._historyBuffer.get(taskId);
+    if (!buffer) {
+      buffer = [];
+      this._historyBuffer.set(taskId, buffer);
+    }
+
+    buffer.push({ event_id: currentCounter, payload: enrichedPayload });
+
+    // 超出容量时移除最旧的事件（从头部截断）
+    if (buffer.length > RING_BUFFER_CAPACITY) {
+      // 批量截断（如果因为某种原因积压超过 1 条，一次性清到容量线）
+      const overflow = buffer.length - RING_BUFFER_CAPACITY;
+      buffer.splice(0, overflow);
+    }
+
+    // ─── 广播给所有活跃客户端 ──────────────────────────────────────
     const conns = this._connections.get(taskId);
     if (!conns || conns.size === 0) return;
 
     let message: string;
     try {
-      message = JSON.stringify(payload);
+      message = JSON.stringify(enrichedPayload);
     } catch {
       return; // 忽略不可序列化的畸形载荷
     }
@@ -98,6 +186,24 @@ export class ConnectionManager implements IConnectionManager {
         }
       });
     }
+  }
+
+  /**
+   * Task 4.8: 查询指定 task 在 afterEventId 之后的所有缓冲事件。
+   *
+   * 用于断线重连后的事件补发（Replay）。
+   *
+   * @param taskId - 任务 ID
+   * @param afterEventId - 客户端最后收到的 event_id，返回所有 > afterEventId 的事件
+   * @returns 按 event_id 升序排列的事件数组
+   */
+  getEventsAfter(taskId: string, afterEventId: number): BufferedEvent[] {
+    const buffer = this._historyBuffer.get(taskId);
+    if (!buffer || buffer.length === 0) return [];
+
+    // 由于 buffer 中的 event_id 是严格递增的，可以用二分搜索优化，
+    // 但 500 条的上限使得线性过滤完全足够
+    return buffer.filter((event) => event.event_id > afterEventId);
   }
 
   /**

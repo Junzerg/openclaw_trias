@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PROJECT_ROOT = resolve(__dirname, '../../..'); 
 const CONSTITUTION_PATH = join(PROJECT_ROOT, 'config', 'constitution.yaml');
-const SOULS_DIR = join(PROJECT_ROOT, 'config', 'souls');
+export const SOULS_DIR = join(PROJECT_ROOT, 'config', 'souls');
 
 const _cachedConstitutions = new Map<string, ConstitutionConfig>();
 const _soulCache = new Map<string, string>();
@@ -81,6 +81,34 @@ export function loadSoul(role: string): string {
 export function clearConfigCache() {
   _cachedConstitutions.clear();
   _soulCache.clear();
+}
+
+/**
+ * Invalidate a specific soul cache entry so the next loadSoul() call
+ * reads fresh content from disk. Used by the hot-edit API.
+ */
+export function invalidateSoul(role: string): void {
+  _soulCache.delete(role);
+}
+
+/**
+ * List all soul file basenames (without extension) from the souls directory.
+ * Returns names like ['speaker', 'radical_mp', 'conservative_mp', ...].
+ */
+export function listSoulNames(): string[] {
+  if (!existsSync(SOULS_DIR)) return [];
+  return readdirSync(SOULS_DIR)
+    .filter((f) => f.endsWith('.md'))
+    .map((f) => f.replace(/\.md$/, ''));
+}
+
+/**
+ * Write new content to a soul markdown file on disk.
+ * Throws if the souls directory doesn't exist.
+ */
+export function writeSoulFile(name: string, content: string): void {
+  const filePath = join(SOULS_DIR, `${name}.md`);
+  writeFileSync(filePath, content, 'utf-8');
 }
 
 /**
