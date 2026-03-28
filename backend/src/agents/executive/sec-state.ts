@@ -90,26 +90,30 @@ ${step.description}
         };
       }
 
+      const output = truncateOutput(result.content);
+
       this.emitEvent(EventAction.TOOL_CALL, {
         tool_name: task.step.required_skill,
         step_index: task.step.index,
         status: 'success',
+        output: output,
       }, undefined, task.task_id);
 
       return {
         task_id: task.task_id,
         step_index: task.step.index,
         status: 'success',
-        output: truncateOutput(result.content),
+        output: output,
         tokens_consumed: task.step.estimated_tokens,
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
       // Emit failure event
       this.emitEvent(EventAction.TOOL_CALL, {
         tool_name: task.step.required_skill,
         step_index: task.step.index,
         status: 'failed',
-        error: err.message || String(err),
+        error: errorMessage,
       }, undefined, task.task_id);
 
       // Return structured failure — never block the Pipeline
@@ -119,7 +123,7 @@ ${step.description}
         status: 'failed',
         output: '',
         tokens_consumed: 0,
-        error: err.message || String(err),
+        error: errorMessage,
       };
     }
   }

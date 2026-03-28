@@ -107,7 +107,18 @@ export class EventMapper {
             } else if (event.action === 'veto') {
                 actionPromise = scene.triggerVeto();
             } else if (event.action === 'tool_call') {
-                actionPromise = scene.triggerToolCall(event.data?.logs || 'Executing code...');
+                const anyEvent = event as Record<string, unknown>;
+                const toolName = (anyEvent.tool_name as string) || 'Tool';
+                const status = (anyEvent.status as string) || 'running';
+                const logs = (anyEvent.output as string) || (anyEvent.error as string) || '';
+                
+                let logMessage = `[${toolName}] ${status.toUpperCase()}`;
+                if (logs) {
+                    logMessage += `\n${logs}`;
+                } else if (status === 'running') {
+                    logMessage = `Starting ${toolName}...`;
+                }
+                actionPromise = scene.triggerToolCall(logMessage);
             } else if (event.action === 'error') {
                 actionPromise = scene.triggerError();
             }
