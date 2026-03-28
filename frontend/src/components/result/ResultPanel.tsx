@@ -18,42 +18,62 @@ export const ResultPanel: React.FC = () => {
 
     const loadData = async () => {
       setLoading(true);
-      try {
-        const [actRes, verdictRes, statusRes] = await Promise.all([
-          fetchAct(activeTaskId).catch(err => {
-            console.warn('Failed to fetch act:', err);
-            return null;
-          }),
-          fetchVerdict(activeTaskId).catch(err => {
-            console.warn('Failed to fetch verdict:', err);
-            return null;
-          }),
-          fetchTaskStatus(activeTaskId).catch(err => {
-            console.warn('Failed to fetch task status:', err);
-            return null;
-          })
-        ]);
 
-        if (!mounted) return;
-        if (actRes && actRes.act) {
-          dispatch({ type: 'ACT_LOADED', act: actRes.act });
+      for (let attempt = 0; attempt < 4; attempt++) {
+        if (!mounted) break;
+
+        try {
+          const [actRes, verdictRes, statusRes] = await Promise.all([
+            fetchAct(activeTaskId).catch(err => {
+              console.warn('Failed to fetch act:', err);
+              return null;
+            }),
+            fetchVerdict(activeTaskId).catch(err => {
+              console.warn('Failed to fetch verdict:', err);
+              return null;
+            }),
+            fetchTaskStatus(activeTaskId).catch(err => {
+              console.warn('Failed to fetch task status:', err);
+              return null;
+            })
+          ]);
+
+          if (!mounted) return;
+          
+          let hasData = false;
+          if (actRes && actRes.act) {
+            dispatch({ type: 'ACT_LOADED', act: actRes.act });
+            hasData = true;
+          }
+          if (statusRes && statusRes.result) {
+            dispatch({ type: 'RESULT_LOADED', result: statusRes.result });
+            hasData = true;
+          }
+          if (verdictRes && verdictRes.ruling) {
+            dispatch({
+              type: 'VERDICT_LOADED',
+              verdict: {
+                ruling: verdictRes.ruling,
+                constitutional: verdictRes.constitutional,
+                evidence: verdictRes.evidence || []
+              }
+            });
+            hasData = true;
+          }
+
+          if (hasData || (statusRes && statusRes.bill_state === 'FAILED')) {
+            break;
+          }
+        } catch (err) {
+          console.warn('Error during loadData retry:', err);
         }
-        if (statusRes && statusRes.result) {
-          dispatch({ type: 'RESULT_LOADED', result: statusRes.result });
+
+        if (attempt < 3 && mounted) {
+          await new Promise(r => setTimeout(r, 1000));
         }
-        if (verdictRes) {
-          dispatch({
-            type: 'VERDICT_LOADED',
-            verdict: {
-              ruling: verdictRes.ruling,
-              constitutional: verdictRes.constitutional,
-              evidence: verdictRes.evidence || []
-            }
-          });
-        }
-      } finally {
-        if (mounted) setLoading(false);
       }
+      
+      if (mounted) setLoading(false);
     };
 
     loadData();

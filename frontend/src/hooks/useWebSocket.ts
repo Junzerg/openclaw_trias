@@ -38,11 +38,18 @@ export function useWebSocket(taskId?: string) {
   const attemptRef = useRef<number>(0);
 
   const processPayload = useCallback((payload: any) => {
-    if (payload.action === 'status_update') {
-      const wsData = payload.data as { task_id?: string; status: string; bill_state?: string };
-      const effectiveStatus = wsData.bill_state ? wsData.bill_state : wsData.status;
-      setTaskStatus({ task_id: wsData.task_id || taskId, status: effectiveStatus } as TaskStatusPayload);
-    } else {
+    if (payload.action === 'status_update' || payload.action === 'state_change') {
+      const wsData = payload.data || {};
+      const effectiveStatus = payload.state || wsData.state || payload.bill_state || wsData.bill_state || payload.status || wsData.status;
+      const tId = payload.task_id || wsData.task_id || taskId;
+      
+      if (effectiveStatus) {
+        setTaskStatus({ task_id: tId, status: effectiveStatus } as TaskStatusPayload);
+      }
+    }
+    
+    // Always forward to EventBus except for legacy 'status_update'
+    if (payload.action !== 'status_update') {
       wsEventBus.next(payload as WSEventPayload);
     }
   }, [taskId]);
@@ -158,7 +165,7 @@ export function useWebSocket(taskId?: string) {
       console.warn('[WS Client] Connection error, will retry...');
       ws.close();
     };
-  }, [taskId, fetchTaskStatus]);
+  }, [taskId, fetchTaskStatus, processPayload]);
 
   useEffect(() => {
     connectRef.current = connect;
