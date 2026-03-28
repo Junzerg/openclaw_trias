@@ -105,6 +105,7 @@ AppContext (useReducer)
 | **4.11** | 🏔️ 议会场景动效打磨 | 🎮 Phaser | `ParliamentScene.ts` 卷轴飞入/信使入场/辩论气泡精调/brawl Lv3 增强 | 4.10 | ⭐⭐ |
 | **4.12** | 🏢 行政场景动效打磨 | 🎮 Phaser | `ExecutiveScene.ts` 双 Secretary/格子间布局/tool_call 代码流增强 | 4.10 | ⭐⭐ |
 | **4.13** | ⚖️ 司法场景动效打磨 & 音效扩充 | 🎮 Phaser | `JudicialScene.ts` Bug 修复/聚光灯精调, `SoundManager.ts` 音效 key 补全 | 4.10 | ⭐⭐ |
+| **4.14** | 🌊 LLM 实时生成流 (Streaming) | 🖥️🔧 双端 | `adapter.ts` streamLLM, `ws-manager.ts` 隧道, `ExecutiveScene.ts` 接收 | 4.1, 4.12 | ⭐⭐⭐⭐ |
 
 ### 3.1 各任务详细说明
 
@@ -483,6 +484,36 @@ AppContext (useReducer)
 
 ---
 
+#### Task 4.14 — 🌊 LLM 实时生成流 (Streaming) 接入与赛博终端
+
+**目标**：解决大模型生成代码期间前端“长时间零反馈”的痛点。通过打通底层架构，将大模型逐字思考的 Token 实时传输并在前端可视化为骇客终端流。
+
+**需求背景**：用户反馈执行长代码任务（如写斗地主引擎）时，后台 openclaw 控制台在大量刷屏吐出字典与代码，而前端 Web 版却在此几分钟内只显示死寂的一行「Executing code...」。
+
+**核心产出**：
+1. **底层水池（OpenClaw Adapter & Agents）**：
+   - `openclaw/adapter.ts` 增强：支持调用 LLM API 时的 `stream: true` 生成异步生成器 `AsyncGenerator`。
+   - `sec-engineering.ts` 和 `sec-state.ts`：将普通调用改为流式抓取，不再阻塞等待全量结果，而是拦截块进行抛出。
+2. **极高频消息节流总线（WebSocket Tunnel）**：
+   - 后端 `schemas/events.ts` 添加 `STREAM_CHUNK` 枚举与 `StreamChunkEvent` 类型定义。
+   - `ws-manager.ts`：增加独立的防抖高并发管道，设定收集窗口（如 `100ms` 打包下发一次），防止频繁重连或拖垮主 Ring Buffer。
+3. **前端渲染（React & Phaser）**：
+   - **React 局部脱敏渲染**：新增专门拦截长文本区块的独立原生 DOM React 壳，杜绝在 `AppContext` `useReducer` 里去记录高频导致整页级联渲染崩溃。
+   - **Phaser 行政大厅赛博监视器**：`ExecutiveScene.ts` 里增加独立的代码流大屏幕 UI（绿色/青色字体），通过事件触发实现原生逐字滚屏，而非动画缓动。
+
+**文件清单**：
+- `[MODIFY] backend/src/openclaw/adapter.ts` — 支持 `streamLLM()`
+- `[MODIFY] backend/src/agents/executive/sec-engineering.ts` 
+- `[MODIFY] backend/src/server/ws-manager.ts` — 流式高频隧道构建
+- `[MODIFY] frontend/src/hooks/useWebSocket.ts` — 新增 chunk 流收集器
+- `[MODIFY] frontend/src/game/scenes/ExecutiveScene.ts` — Phaser 赛博流监控大屏幕
+
+**前置依赖**：Task 4.1（前端底层完成）及 4.12（基础动画已做完）
+
+**任务文档**：`docs/plan_ts/phase4/task4.14_llm_streaming.md`
+
+---
+
 ## 4. 模块依赖拓扑图
 
 ```mermaid
@@ -500,6 +531,7 @@ graph TD
     T411["🏔️ Task 4.11<br/>议会场景<br/>动效打磨"]
     T412["🏢 Task 4.12<br/>行政场景<br/>动效打磨"]
     T413["⚖️ Task 4.13<br/>司法场景<br/>& 音效扩充"]
+    T414["🌊 Task 4.14<br/>LLM 实况代码<br/>Token 实时流"]
 
     T41 --> T42
     T41 --> T43
@@ -512,6 +544,7 @@ graph TD
     T410 --> T411
     T410 --> T412
     T410 --> T413
+    T412 --> T414
     T44 --> T45
     T45 --> T47
 
@@ -528,14 +561,15 @@ graph TD
     style T411 fill:#d97a4a,stroke:#8a4e2c,color:#fff
     style T412 fill:#d97a4a,stroke:#8a4e2c,color:#fff
     style T413 fill:#d97a4a,stroke:#8a4e2c,color:#fff
+    style T414 fill:#22aaff,stroke:#115588,color:#fff
 ```
 
 > **关键路径**：`4.1 → 4.4 → 4.5 → 4.7`（辩论面板 → 图表集成 → Token 仪表盘链条最长）
 >
 > **最大并行度**：Task 4.1 完成后，4.2 / 4.3 / 4.4 / 4.6 / 4.8 / 4.9 / 4.10 共 7 个可并行；Task 4.10 完成后 4.11 / 4.12 / 4.13 三场景可并行。
 >
-> **建议执行顺序**：4.1 → 4.10 → 4.11 → 4.12 → 4.13 → 4.2 → 4.3 → 4.4 → 4.5 → 4.6 → 4.7 → 4.8 → 4.9
-> （架构 → 场景过渡 → 议会打磨 → 行政打磨 → 司法打磨+音效 → 请愿 → 任务列表 → 辩论 → 图表 → 结果 → Token → WS → SOUL）
+> **建议执行顺序**：4.1 → 4.10 → 4.11 → 4.12 → 4.13 → 4.2 → 4.3 → 4.4 → 4.5 → 4.6 → 4.7 → 4.8 → 4.9 → 4.14
+> （架构 → 场景过渡 → 议会打磨 → 行政打磨 → 司法打磨+音效 → 请愿 → 任务列表 → 辩论 → 图表 → 结果 → Token → WS → SOUL → LLM 实时流）
 
 ---
 
@@ -556,6 +590,7 @@ graph TD
 | _(新增)_ | 议会场景动效打磨 | **4.11** | ✨ 新增：卷轴飞入/信使入场/brawl Lv3 增强/气泡精调 |
 | _(新增)_ | 行政场景动效打磨 | **4.12** | ✨ 新增：双 Secretary 格子间/代码流增强/印章优化 |
 | _(新增)_ | 司法场景动效 & 音效扩充 | **4.13** | ✨ 新增：resetState Bug 修复/聚光灯动态化/SoundManager 补全 |
+| _(新增)_ | LLM 实时生成流 (Streaming) | **4.14** | ✨ 新增(Epic)：全链路底层对接 Token chunk 解决长等待时间死寂问题 |
 
 ---
 
@@ -590,3 +625,4 @@ graph TD
 | `docs/plan_ts/phase4/task4.11_parliament_polish.md` | 🏔️ 议会场景动效打磨 |
 | `docs/plan_ts/phase4/task4.12_executive_polish.md` | 🏢 行政场景动效打磨 |
 | `docs/plan_ts/phase4/task4.13_judicial_polish.md` | ⚖️ 司法场景动效 & 音效扩充 |
+| `docs/plan_ts/phase4/task4.14_llm_streaming.md` | 🌊 LLM 实时生成流 (Streaming) 接入与赛博终端 |
