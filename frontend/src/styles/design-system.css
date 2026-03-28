@@ -226,15 +226,23 @@ body {
   left: -24px;
 }
 
+.center-column {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  overflow: hidden;
+  background-color: var(--color-bg-primary);
+}
+
 .canvas-container {
   flex-grow: 1;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--color-bg-primary); /* The backdrop to the canvas */
   overflow: hidden;
   padding: var(--spacing-md);
+  min-height: 0; /* Important for flex-child to not overflow */
 }
 
 .canvas-container > div {
@@ -246,4 +254,15 @@ body {
   border-radius: 8px;
   overflow: hidden;
   box-shadow: var(--shadow-elevated);
+}
+
+.bottom-panel {
+  flex-shrink: 0;
+  height: 35%;
+  min-height: 200px;
+  background-color: var(--color-bg-panel);
+  border-top: 1px solid rgba(255,255,255,0.05);
+  box-shadow: var(--shadow-panel);
+  z-index: 10;
+  overflow: hidden;
 }

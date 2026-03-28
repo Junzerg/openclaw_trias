@@ -175,7 +175,7 @@ ${debateResult.final_proposal}
     return {
       act_id: randomUUID(),
       title: `法案：${petition.substring(0, 50)}`,
-      summary: debateResult.final_proposal.substring(0, 200),
+      summary: debateResult.final_proposal,
       petition_origin: petition,
       steps: [step],
       total_estimated_tokens: step.estimated_tokens,

@@ -94,7 +94,7 @@
 }
 
 .debate-bubble {
-  max-width: 85%;
+  max-width: 75%;
   padding: var(--spacing-md);
   border-radius: 12px;
   font-size: 0.875rem;
@@ -230,15 +230,17 @@
 .conflict-score-chart-container {
   height: 150px;
   flex-shrink: 0;
-  background: rgba(26, 31, 46, 0.4);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(26, 31, 46, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 8px;
   padding: var(--spacing-sm) var(--spacing-sm) 0 var(--spacing-sm);
   display: flex;
   flex-direction: column;
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 10;
   overflow: hidden;
 }
 

@@ -178,9 +178,10 @@ export function createRouter(): Router {
 
       const rounds: DebateRound[] = [];
       const conflictScores: number[] = [];
+      const tokenEvents: Array<Record<string, unknown>> = [];
 
       for (const row of eventRows) {
-        if (!['propose', 'debate', 'order', 'brawl'].includes(row.action)) continue;
+        if (!['propose', 'debate', 'order', 'brawl', 'token_usage'].includes(row.action)) continue;
 
         let payload: Record<string, unknown>;
         try {
@@ -195,6 +196,14 @@ export function createRouter(): Router {
           continue;
         }
 
+        if (row.action === 'token_usage') {
+          const innerData = (payload.payload && typeof payload.payload === 'object') 
+                            ? payload.payload 
+                            : payload;
+          tokenEvents.push(innerData as Record<string, unknown>);
+          continue;
+        }
+
         const statement: string = String(payload.statement ?? '');
         // 关键陷阱防备：因为 0 是假值，使用 || 会导致 payload 里显式提供的 conflict_score = 0 被后置变量覆盖。改用 ?? 严格空值合并。
         const conflictScore: number = Number(payload.conflict_score ?? payload.intensity) || 0.0;
@@ -205,7 +214,7 @@ export function createRouter(): Router {
            if (rounds.length > 0) {
                rounds[rounds.length - 1].speaker_intervention = statement;
            }
-           if (conflictScore > 0) {
+           if (conflictScore > 0 && (conflictScores.length === 0 || conflictScores[conflictScores.length - 1] !== conflictScore)) {
                conflictScores.push(conflictScore);
            }
            continue; // Speaker 解析完毕
@@ -244,13 +253,17 @@ export function createRouter(): Router {
             : statement;
         }
         r.conflict_score = conflictScore;
-        conflictScores.push(conflictScore);
+        // 修复：和 WebSocket 逻辑保持一致，过滤掉连续重复的分数
+        if (conflictScores.length === 0 || conflictScores[conflictScores.length - 1] !== conflictScore) {
+          conflictScores.push(conflictScore);
+        }
       }
 
       const body: DebateResponse = {
         task_id: taskId,
         rounds,
         conflict_score_curve: conflictScores,
+        token_events: tokenEvents,
       };
       res.json(body);
     } catch (err) {

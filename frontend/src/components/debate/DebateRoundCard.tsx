@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { DebateRound } from '../../contexts/AppContext';
@@ -11,11 +11,9 @@ interface DebateRoundCardProps {
 
 /**
  * Typewriter hook — gradually reveals text at a fast pace.
- * Targets ~1.5s total reveal time regardless of text length,
- * with a minimum of 5ms per chunk and a minimum chunk size of 3 chars.
+ * Bulletproof implementation to prevent cursor getting stuck.
  */
 function useTypewriter(fullText: string | undefined, enabled: boolean = true) {
-  const prevTextRef = useRef<string | undefined>(undefined);
   const [displayedLength, setDisplayedLength] = useState(() => {
     // If disabled or no text on first render, show everything immediately
     if (!enabled || !fullText) return fullText?.length ?? 0;
@@ -26,51 +24,41 @@ function useTypewriter(fullText: string | undefined, enabled: boolean = true) {
   const isComplete = displayedLength >= effectiveLength;
 
   useEffect(() => {
-    if (!fullText || !enabled) {
-      // When disabled, we don't animate — parent reads displayedLength via useMemo
-      prevTextRef.current = fullText;
+    if (!fullText) {
+      setDisplayedLength(0);
+      return;
+    }
+    
+    // Snap to complete instantly if we collapse/disable
+    if (!enabled) {
+      setDisplayedLength(fullText.length);
       return;
     }
 
-    // Determine start position: if new text extends old, type from the old end
-    const prevText = prevTextRef.current;
-    const startFrom = prevText && fullText.startsWith(prevText) ? prevText.length : 0;
-    prevTextRef.current = fullText;
-
-    if (startFrom >= fullText.length) return;
-
-    const remaining = fullText.length - startFrom;
-    const TARGET_DURATION_MS = 5000;
-    const MIN_INTERVAL = 5;
-    const chunkSize = Math.max(3, Math.ceil(remaining / (TARGET_DURATION_MS / MIN_INTERVAL)));
-    const intervalMs = Math.max(MIN_INTERVAL, Math.floor(TARGET_DURATION_MS / Math.ceil(remaining / chunkSize)));
-
-    let current = startFrom;
-    // Use setTimeout(0) for the initial reset to avoid synchronous setState in effect body
-    const initialTimer = setTimeout(() => {
-      setDisplayedLength(startFrom);
-    }, 0);
+    if (displayedLength >= fullText.length) {
+      return;
+    }
 
     const timer = setInterval(() => {
-      current = Math.min(current + chunkSize, fullText.length);
-      setDisplayedLength(current);
-      if (current >= fullText.length) {
-        clearInterval(timer);
-      }
-    }, intervalMs);
+      setDisplayedLength((prev) => {
+        const next = prev + 8; // 8 chars per ~15ms is extremely fast but visible
+        if (next >= fullText.length) {
+          clearInterval(timer);
+          return fullText.length;
+        }
+        return next;
+      });
+    }, 15);
 
-    return () => {
-      clearTimeout(initialTimer);
-      clearInterval(timer);
-    };
-  }, [fullText, enabled]);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullText, enabled]); // Only re-run when actual text or visibility changes
 
   const displayedText = useMemo(() => {
     if (!fullText) return '';
-    if (!enabled) return fullText;
     if (displayedLength >= fullText.length) return fullText;
     return fullText.substring(0, displayedLength);
-  }, [fullText, displayedLength, enabled]);
+  }, [fullText, displayedLength]);
 
   return { displayedText, isComplete };
 }

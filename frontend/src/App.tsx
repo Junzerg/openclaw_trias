@@ -9,6 +9,9 @@ import { AppShell } from './components/layout/AppShell';
 import { PetitionPanel } from './components/petition/PetitionPanel';
 import { TaskList } from './components/petition/TaskList';
 import { DebateLogPanel } from './components/debate/DebateLogPanel';
+import { ResultPanel } from './components/result/ResultPanel';
+import { TokenDashboard } from './components/metrics/TokenDashboard';
+import { ConflictScoreChart } from './components/debate/ConflictScoreChart';
 
 import './styles/design-system.css';
 import './App.css';
@@ -69,6 +72,8 @@ function AppContent() {
         dispatch({ type: 'DEBATE_EVENT', event });
       } else if (event.action === 'llm_thinking') {
         dispatch({ type: 'THINKING_EVENT', event });
+      } else if (event.action === 'token_usage') {
+        dispatch({ type: 'TOKEN_USAGE', event });
       }
     });
     return () => sub.unsubscribe();
@@ -81,15 +86,29 @@ function AppContent() {
     }
   }, [taskStatus, taskIdToUse]);
 
+  const statusStr = (taskStatus?.status as string | undefined)?.toUpperCase();
+  const isResultPhase = statusStr === 'CONSTITUTIONAL' || 
+                        statusStr === 'UNCONSTITUTIONAL' || 
+                        statusStr === 'DELIVERED' ||
+                        statusStr === 'FAILED';
+
   return (
     <AppShell 
       leftPanel={
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto', overflowX: 'hidden' }}>
           <PetitionPanel />
           <TaskList />
         </div>
       }
-      rightPanel={<DebateLogPanel />}
+      rightPanel={
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto', overflowX: 'hidden' }}>
+          <ConflictScoreChart />
+          <div style={{ marginTop: 'var(--spacing-md)' }}>
+            <TokenDashboard />
+          </div>
+        </div>
+      }
+      bottomPanel={isResultPhase ? <ResultPanel /> : <DebateLogPanel />}
     >
       <div ref={gameRef} style={{ width: '100%', height: '100%' }} />
     </AppShell>

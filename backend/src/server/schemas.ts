@@ -68,6 +68,7 @@ export const DebateResponseSchema = z.object({
   task_id: z.string(),
   rounds: z.array(DebateRoundSchema).default([]),
   conflict_score_curve: z.array(z.number()).default([]),
+  token_events: z.array(z.record(z.string(), z.any())).optional(),
 });
 export type DebateResponse = z.infer<typeof DebateResponseSchema>;
 

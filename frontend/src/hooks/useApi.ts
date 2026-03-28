@@ -15,6 +15,7 @@ export interface TaskStatusResponse {
   task_id: string;
   status: string;
   bill_state: string;
+  result?: Record<string, unknown> | null;
 }
 
 import type { DebateRound } from '../contexts/AppContext';
@@ -22,14 +23,21 @@ import type { DebateRound } from '../contexts/AppContext';
 export interface DebateResponse {
   rounds: DebateRound[];
   conflict_score_curve?: number[];
+  token_events?: Record<string, unknown>[];
 }
 
 export interface ActResponse {
-  content: string;
+  task_id: string;
+  act: Record<string, unknown>;
+  created_at: string;
 }
 
 export interface VerdictResponse {
+  task_id: string;
+  constitutional: boolean;
   ruling: string;
+  evidence: string[];
+  created_at: string;
 }
 
 export function useApi() {

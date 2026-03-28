@@ -39,6 +39,9 @@ export class CyberGovernment {
   public bus: MessageBus;
   public eventLogger: EventLogger;
 
+  /** Cumulative token counters per branch */
+  private _tokenCounters = { legislative: 0, executive: 0, judicial: 0 };
+
   constructor(configDir: string, constitution?: ConstitutionConfig) {
     this._configDir = configDir;
     
@@ -188,6 +191,12 @@ export class CyberGovernment {
       petition  // Bug 40 fix: 显式传递 petition，避免并发 pipeline 竞态
     );
 
+    // Token 埋点①：立法辩论阶段
+    // 估算：每轮辩论约 2000 tokens（提案 + 批评 + 反驳 + 议长介入）
+    const debateTokens = debateResult.rounds.length * 2000;
+    this._tokenCounters.legislative += debateTokens;
+    await this._publishTokenUsage(billId, 'legislative', debateTokens, this._tokenCounters.legislative);
+
     lifecycle.transition(BillState.VOTED);
     await this._publishLifecycle(billId, "voted");
 
@@ -208,6 +217,11 @@ export class CyberGovernment {
 
     const veto = await this.president.evaluateAct(act);
 
+    // Token 埋点②：总统审查法案
+    const signTokens = 1500;
+    this._tokenCounters.executive += signTokens;
+    await this._publishTokenUsage(billId, 'executive', signTokens, this._tokenCounters.executive);
+
     if (veto !== null && veto !== undefined) {
       lifecycle.transition(BillState.VETOED);
       // President emits VETO event internally
@@ -223,6 +237,11 @@ export class CyberGovernment {
     await this._publishLifecycle(billId, "executing");
 
     const report = await this.executionEngine.executeAct(act);
+
+    // Token 埋点③：内阁执行阶段
+    const execTokens = report.total_tokens_consumed || 0;
+    this._tokenCounters.executive += execTokens;
+    await this._publishTokenUsage(billId, 'executive', execTokens, this._tokenCounters.executive);
 
     // Bug 6+49 fix: 全失败或部分失败的执行不应送去司法审查
     // partial: 残缺产出送给 ResultReviewer 会因为只有部分成功输出而产生虚假偏离度评分
@@ -240,6 +259,11 @@ export class CyberGovernment {
 
     const verdict = await this.chiefJustice.reviewResult(petition, report);
     await this.chiefJustice.issueJudgment(verdict);
+
+    // Token 埋点④：司法审查阶段
+    const judicialTokens = 2000;
+    this._tokenCounters.judicial += judicialTokens;
+    await this._publishTokenUsage(billId, 'judicial', judicialTokens, this._tokenCounters.judicial);
 
     if (!verdict.constitutional) {
       lifecycle.transition(BillState.UNCONSTITUTIONAL);
@@ -301,5 +325,23 @@ export class CyberGovernment {
       _forced: true,
       _original_vote: { ayes: originalAyes, nays: originalNays },
     };
+  }
+
+  private async _publishTokenUsage(
+    billId: string,
+    branch: 'legislative' | 'executive' | 'judicial',
+    tokensUsed: number,
+    cumulative: number
+  ): Promise<void> {
+    const event: BaseEvent = {
+      timestamp: new Date(),
+      source_agent: 'government',
+      action: EventAction.TOKEN_USAGE,
+      payload: { branch, tokens_used: tokensUsed, cumulative },
+      task_id: billId,
+      emotion: EmotionType.NEUTRAL,
+      intensity: 0,
+    };
+    await this.bus.publish('lifecycle', event);
   }
 }

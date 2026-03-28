@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react';
 import { useAppState, useAppDispatch } from '../../contexts/AppContext';
 import { useApi } from '../../hooks/useApi';
 import { DebateRoundCard } from './DebateRoundCard';
-import { ConflictScoreChart } from './ConflictScoreChart';
 import './Debate.css';
 
 export function DebateLogPanel() {
@@ -21,6 +20,15 @@ export function DebateLogPanel() {
             rounds: res.rounds,
             conflictScores: res.conflict_score_curve || [],
           });
+          
+          if (res.token_events && res.token_events.length > 0) {
+            res.token_events.forEach(te => {
+              dispatch({ 
+                type: 'TOKEN_USAGE', 
+                event: { action: 'token_usage', payload: te } as unknown as { action: string, payload: { branch: string, cumulative: number } }
+              });
+            });
+          }
         })
         .catch(console.error);
     }
@@ -46,7 +54,6 @@ export function DebateLogPanel() {
   if (debate.rounds.length === 0) {
     return (
       <div className="debate-log-panel">
-        <ConflictScoreChart />
         <div className="debate-empty-state">
           <div className="status-dot" style={{ backgroundColor: 'var(--color-accent-blue)', marginBottom: 'var(--spacing-md)' }} />
           <div>Waiting for debate to begin...</div>
@@ -57,8 +64,6 @@ export function DebateLogPanel() {
 
   return (
     <div className="debate-log-panel">
-      <ConflictScoreChart />
-      
       {debate.rounds.map((round) => (
         <DebateRoundCard 
           key={`round-${round.round_number}`} 

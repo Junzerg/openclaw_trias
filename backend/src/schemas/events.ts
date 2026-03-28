@@ -12,6 +12,7 @@ export enum EventAction {
   UNCONSTITUTIONAL = 'unconstitutional',
   STATE_CHANGE = 'state_change',
   LLM_THINKING = 'llm_thinking',
+  TOKEN_USAGE = 'token_usage',
 }
 
 export enum EmotionType {
@@ -72,3 +73,13 @@ export const JudgmentEventSchema = BaseEventSchema.extend({
   evidence: z.array(z.string()).default([]).describe('证据列表'),
 });
 export type JudgmentEvent = z.infer<typeof JudgmentEventSchema>;
+
+export const TokenUsageEventSchema = BaseEventSchema.extend({
+  action: z.literal(EventAction.TOKEN_USAGE).default(EventAction.TOKEN_USAGE),
+  payload: z.object({
+    branch: z.union([z.literal('legislative'), z.literal('executive'), z.literal('judicial')]).describe('三权分支'),
+    tokens_used: z.number().min(0).describe('本次消耗 Token'),
+    cumulative: z.number().min(0).describe('该分支累计消耗 Token'),
+  }),
+});
+export type TokenUsageEvent = z.infer<typeof TokenUsageEventSchema>;

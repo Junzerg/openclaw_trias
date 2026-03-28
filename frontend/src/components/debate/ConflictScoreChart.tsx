@@ -14,12 +14,13 @@ export function ConflictScoreChart() {
   const { debate, activeTaskId } = useAppState();
 
   const data = useMemo(() => {
-    const scores = debate.conflictScores || [];
-    return scores.map((val, idx) => ({
-      round: idx + 1,
-      score: val,
-    }));
-  }, [debate.conflictScores]);
+    return (debate.rounds || [])
+      .filter((r) => r.conflict_score !== undefined)
+      .map((r) => ({
+        round: r.round_number,
+        score: r.conflict_score,
+      }));
+  }, [debate.rounds]);
 
   if (!activeTaskId || data.length === 0) {
     return null;
@@ -28,7 +29,18 @@ export function ConflictScoreChart() {
   const threshold = 30; // 默认值 30（后续可由 constitution.yaml 提供支持）
 
   return (
-    <div className="conflict-score-chart-container">
+    <div 
+      className="conflict-score-chart-container" 
+      style={{ 
+        position: 'sticky', 
+        top: '-16px', 
+        zIndex: 50, 
+        margin: '-16px -16px 16px -16px', 
+        paddingTop: '24px',
+        borderTopLeftRadius: 0,
+        borderTopRightRadius: 0
+      }}
+    >
       <div className="chart-title">Conflict Score</div>
       <div style={{ flex: 1, minHeight: 0 }}>
         <ResponsiveContainer width="100%" height="100%">

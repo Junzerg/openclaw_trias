@@ -55,7 +55,7 @@ export class ParliamentScene extends Phaser.Scene {
         return this.conservativeMP;
     }
 
-    private activeBubbles: Map<Phaser.GameObjects.Sprite, Phaser.GameObjects.Text> = new Map();
+    private activeBubbles: Map<Phaser.GameObjects.Sprite, Phaser.GameObjects.Container> = new Map();
 
     // ──────────────────────────────────────────────
     //  Typewriter text bubble
@@ -83,29 +83,93 @@ export class ParliamentScene extends Phaser.Scene {
             const x = sourceSprite.x;
             const y = sourceSprite.y - (sourceSprite.displayHeight / 2) - 40;
 
-            const textObj = this.add.text(x, y, '', {
+            const boxWidth = 320;
+            const boxHeight = 300; // 现为原来的 2.5 倍高
+            const padding = 10;
+            const innerWidth = boxWidth - padding * 2;
+
+            const container = this.add.container(x, y).setDepth(100);
+
+            const bgColor = type === 'propose' ? 0xffffff : 0xe0f7fa;
+            const bgGraphics = this.add.graphics();
+            bgGraphics.fillStyle(bgColor, 0.95);
+            bgGraphics.lineStyle(1, 0x000000, 0.2);
+            bgGraphics.fillRoundedRect(-boxWidth / 2, -boxHeight, boxWidth, boxHeight, 8);
+            bgGraphics.strokeRoundedRect(-boxWidth / 2, -boxHeight, boxWidth, boxHeight, 8);
+            container.add(bgGraphics);
+
+            const maskGraphics = this.make.graphics({});
+            maskGraphics.fillRect(x - boxWidth / 2, y - boxHeight, boxWidth, boxHeight);
+            const geometryMask = maskGraphics.createGeometryMask();
+
+            const textObj = this.add.text(-boxWidth / 2 + padding, -boxHeight + padding, '', {
                 fontSize: '14px',
                 color: '#000000',
-                backgroundColor: type === 'propose' ? '#ffffff' : '#e0f7fa',
-                padding: { x: 10, y: 10 },
-                wordWrap: { width: 320, useAdvancedWrap: true }
-            }).setOrigin(0.5, 1).setDepth(100);
+                wordWrap: { width: innerWidth, useAdvancedWrap: true }
+            });
+            textObj.setMask(geometryMask);
+            container.add(textObj);
 
-            this.activeBubbles.set(sourceSprite, textObj);
+            // Invisible interactive zone over the container area
+            const zone = this.add.zone(0, -boxHeight / 2, boxWidth, boxHeight)
+                .setInteractive({ useHandCursor: true });
+            container.add(zone);
+
+            this.activeBubbles.set(sourceSprite, container);
+
+            let isDragging = false;
+            let startY = 0;
+            let startTextY = 0;
+
+            const clampScroll = () => {
+                const textHeight = textObj.height;
+                const maxScroll = -boxHeight + padding;
+                const minScroll = textHeight <= boxHeight - padding * 2 
+                    ? maxScroll 
+                    : -boxHeight + padding - (textHeight - (boxHeight - padding * 2));
+
+                textObj.y = Phaser.Math.Clamp(textObj.y, minScroll, maxScroll);
+            };
+
+            zone.on('wheel', (_pointer: Phaser.Input.Pointer, _deltaX: number, deltaY: number) => {
+                textObj.y -= deltaY * 0.5;
+                clampScroll();
+            });
+
+            zone.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+                isDragging = true;
+                startY = pointer.y;
+                startTextY = textObj.y;
+            });
+
+            zone.on('pointerup', () => { isDragging = false; });
+            zone.on('pointerout', () => { isDragging = false; });
+
+            zone.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+                if (isDragging) {
+                    const delta = pointer.y - startY;
+                    textObj.y = startTextY + delta;
+                    clampScroll();
+                }
+            });
 
             const textLength = text.length;
             let i = 0;
             let currentText = "";
-            const MAX_CHARS_ON_SCREEN = 250;
+            const MAX_CHARS_ON_SCREEN = 800;
 
             this.time.addEvent({
                 callback: () => {
                     currentText += text[i];
-                    // Keep sliding window of max 100 characters
                     if (currentText.length > MAX_CHARS_ON_SCREEN) {
                         textObj.text = currentText.slice(-MAX_CHARS_ON_SCREEN);
                     } else {
                         textObj.text = currentText;
+                    }
+                    
+                    const textHeight = textObj.height;
+                    if (textHeight > boxHeight - padding * 2) {
+                        textObj.y = -boxHeight + padding - (textHeight - (boxHeight - padding * 2));
                     }
                     
                     if (i % 2 === 0) soundManager.play('typewriter', { volume: 1.0 });

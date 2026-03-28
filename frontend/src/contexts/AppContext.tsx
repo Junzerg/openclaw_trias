@@ -39,6 +39,8 @@ export interface AppState {
     steps: unknown[];
     currentStep: number;
   };
+  act: Record<string, unknown> | null;
+  result: Record<string, unknown> | null;
   verdict: {
     ruling: string;
     constitutional: boolean;
@@ -49,6 +51,7 @@ export interface AppState {
     executive: number;
     judicial: number;
     total: number;
+    timeline: { index: number; legislative: number; executive: number; judicial: number; total: number }[];
   };
 }
 
@@ -63,7 +66,10 @@ export type AppAction =
   | { type: 'THINKING_EVENT'; event: WSEventPayload }
   | { type: 'DEBATE_RESET' }
   | { type: 'DEBATE_LOAD_HISTORY'; rounds: DebateRound[]; conflictScores: number[] }
-  | { type: 'TOKEN_USAGE'; event: unknown }
+  | { type: 'TOKEN_USAGE'; event: { payload?: { branch?: string; tokens_used?: number; cumulative?: number }; [key: string]: unknown } }
+  | { type: 'ACT_LOADED'; act: Record<string, unknown> }
+  | { type: 'RESULT_LOADED'; result: Record<string, unknown> }
+  | { type: 'VERDICT_LOADED'; verdict: { ruling: string; constitutional: boolean; evidence: string[] } }
   | { type: 'RESET' };
 
 const initialState: AppState = {
@@ -73,8 +79,10 @@ const initialState: AppState = {
   tasks: [],
   debate: { rounds: [], conflictScores: [], currentRound: 0, thinkingAgent: null },
   execution: { steps: [], currentStep: 0 },
+  act: null,
+  result: null,
   verdict: null,
-  tokens: { legislative: 0, executive: 0, judicial: 0, total: 0 },
+  tokens: { legislative: 0, executive: 0, judicial: 0, total: 0, timeline: [] },
 };
 
 function appReducer(state: AppState, action: AppAction): AppState {
@@ -114,7 +122,10 @@ function appReducer(state: AppState, action: AppAction): AppState {
         ],
         debate: { rounds: [], conflictScores: [], currentRound: 0, thinkingAgent: null },
         execution: { steps: [], currentStep: 0 },
+        act: null,
+        result: null,
         verdict: null,
+        tokens: { legislative: 0, executive: 0, judicial: 0, total: 0, timeline: [] },
       };
     case 'PETITION_ERROR':
       return {
@@ -131,7 +142,10 @@ function appReducer(state: AppState, action: AppAction): AppState {
         activeTaskId: action.taskId,
         debate: { rounds: [], conflictScores: [], currentRound: 0, thinkingAgent: null },
         execution: { steps: [], currentStep: 0 },
+        act: null,
+        result: null,
         verdict: null,
+        tokens: { legislative: 0, executive: 0, judicial: 0, total: 0, timeline: [] },
       };
     case 'SET_TASKS':
       return {
@@ -260,6 +274,46 @@ function appReducer(state: AppState, action: AppAction): AppState {
           thinkingAgent: null
         }
       };
+    }
+    case 'ACT_LOADED':
+      return {
+        ...state,
+        act: action.act,
+      };
+    case 'RESULT_LOADED':
+      return {
+        ...state,
+        result: action.result,
+      };
+    case 'VERDICT_LOADED':
+      return {
+        ...state,
+        verdict: action.verdict,
+      };
+    case 'TOKEN_USAGE': {
+      // Extract token usage data from the WS event payload
+      const payload = action.event?.payload as Record<string, unknown> | undefined;
+      const branch = (payload?.branch ?? (action.event as Record<string, unknown>)?.branch) as string | undefined;
+      const cumulative = Number(payload?.cumulative ?? (action.event as Record<string, unknown>)?.cumulative) || 0;
+
+      if (!branch || !['legislative', 'executive', 'judicial'].includes(branch)) {
+        return state;
+      }
+
+      const newTokens = { ...state.tokens };
+      newTokens[branch as 'legislative' | 'executive' | 'judicial'] = cumulative;
+      newTokens.total = newTokens.legislative + newTokens.executive + newTokens.judicial;
+
+      const timelineEntry = {
+        index: newTokens.timeline.length + 1,
+        legislative: newTokens.legislative,
+        executive: newTokens.executive,
+        judicial: newTokens.judicial,
+        total: newTokens.total,
+      };
+      newTokens.timeline = [...state.tokens.timeline, timelineEntry];
+
+      return { ...state, tokens: newTokens };
     }
     // Other actions will be implemented in subsequent tasks
     default:

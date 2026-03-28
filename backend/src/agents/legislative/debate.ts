@@ -107,15 +107,36 @@ export class DebateEngine {
         critiqueText = await conservative.rebut(currentProposal);
       }
 
+      // 先计算分数，再触发 WS 广播，确保分歧度曲线画的是对的
+      const scoreResult = this.conflictEngine.compute(currentProposal, critiqueText);
+      let score = scoreResult.score;
+
+      // 如果直接投降，强制分数归零
+      if (critiqueText.includes('[CONSENSUS_REACHED]')) {
+        score = 0;
+      }
+
       conservative.emitEvent(EventAction.PROPOSE, { 
         statement: critiqueText, 
         round_number: roundNum, 
-        conflict_score: finalScore 
+        conflict_score: score 
       }, undefined, taskId);
 
-      const scoreResult = this.conflictEngine.compute(currentProposal, critiqueText);
-      const score = scoreResult.score;
       scoreHistory.push(score);
+
+      // 达成共识提前退出
+      if (critiqueText.includes('[CONSENSUS_REACHED]')) {
+        rounds.push({
+          round_number: roundNum,
+          proposal: currentProposal,
+          critique: critiqueText,
+          rebuttal: '',
+          conflict_score: 0,
+          speaker_intervention: null
+        });
+        finalScore = 0;
+        break; // 提前退出
+      }
 
       let intervention: string | null = null;
       if (score > this.config.conflict_threshold) {
@@ -143,22 +164,6 @@ export class DebateEngine {
           finalScore = score;
           break;
         }
-      }
-
-      // Bug 1 + 2 fix: 结构化判定提前终止（硬短路）
-      // 当任一方输出 [CONSENSUS_REACHED] 标记时，强制达成共识退出。
-      // 为保证 `final_proposal` 具有真正的代码意义，保留上一个具有实际内容的提案 currentProposal，不再将其覆盖为毫无意义的共识短语。
-      if (critiqueText.includes('[CONSENSUS_REACHED]')) {
-        rounds.push({
-          round_number: roundNum,
-          proposal: currentProposal,
-          critique: critiqueText,
-          rebuttal: '',
-          conflict_score: 0,
-          speaker_intervention: intervention
-        });
-        finalScore = 0;
-        break; // break early immediately
       }
 
       rounds.push({
@@ -232,7 +237,8 @@ export class VotingMachine {
       if (typeof voter.emitEvent === 'function') {
         voter.emitEvent(EventAction.PROPOSE, {
            statement: `[VOTING] 投票已决：我投**${outcome.voteValue ? '赞成票' : '反对票'}**！\n\n${outcome.reason}`,
-           round_number: voteRound
+           round_number: voteRound,
+           conflict_score: 0 // 防止前端因为没有分数走默认 intensity 而画出 50 分的曲折线
         }, undefined, taskId);
       }
 

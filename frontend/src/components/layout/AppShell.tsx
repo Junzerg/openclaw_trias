@@ -6,9 +6,10 @@ interface AppShellProps {
   children: React.ReactNode; // Center canvas goes here
   leftPanel?: React.ReactNode;
   rightPanel?: React.ReactNode;
+  bottomPanel?: React.ReactNode;
 }
 
-export function AppShell({ children, leftPanel, rightPanel }: AppShellProps) {
+export function AppShell({ children, leftPanel, rightPanel, bottomPanel }: AppShellProps) {
   const { connection } = useAppState();
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
@@ -49,9 +50,23 @@ export function AppShell({ children, leftPanel, rightPanel }: AppShellProps) {
           </div>
         </aside>
 
-        {/* Center Canvas */}
-        <section className="canvas-container">
-          {children}
+        {/* Center Column */}
+        <section className="center-column">
+          {/* Top Canvas */}
+          <div className="canvas-container">
+            {children}
+          </div>
+          
+          {/* Bottom Panel */}
+          {bottomPanel && (
+            <div className="bottom-panel">
+              <div className="panel-inner">
+                <div className="panel-content">
+                  {bottomPanel}
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Right Panel */}

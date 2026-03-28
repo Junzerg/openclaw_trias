@@ -30,7 +30,7 @@ export class RadicalMP extends BaseAgent {
 
   async vote(proposal: string): Promise<VoteOutcome> {
     this.requirePermission(Permission.PLAN);
-    const prompt = `作为激进派议员，请对以下提案投票（赞成/反对）：\n\n<proposal>\n${proposal}\n</proposal>`;
+    const prompt = `作为激进派议员，请对以下提案投票（赞成/反对）。无论之前是否已达成共识，你必须且只能明确回复包含“赞成”或“反对”字样：\n\n<proposal>\n${proposal}\n</proposal>`;
     const result = await this.callLLM(prompt);
     const content = result.content;
     
@@ -42,14 +42,16 @@ export class RadicalMP extends BaseAgent {
       .replace(/\bnot\s+a\s+problem\b/gi, '');
     // 2. 检测反对
     const isNay = content.includes('反对') || /\bno\b/.test(cleanedForNay) || /\bnay\b/.test(cleanedForNay);
-    if (isNay) return { voteValue: false, reason: content };
+    if (isNay && !content.includes('[CONSENSUS_REACHED]')) return { voteValue: false, reason: content };
+    
     // 3. 检测赞成（扩展关键词）
     const voteValue = content.includes('赞成') || content.includes('同意') || content.includes('支持')
+      || content.includes('[CONSENSUS_REACHED]')
       || /\byes\b/.test(resultLower) || /\baye\b/.test(resultLower)
       || /\bsupport\b/.test(resultLower) || /\bagree\b/.test(resultLower)
       || /\bapprove\b/.test(resultLower);
       
-    return { voteValue, reason: content };
+    return { voteValue: voteValue || false, reason: content };
   }
 }
 
