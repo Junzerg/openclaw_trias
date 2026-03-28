@@ -174,23 +174,28 @@ ${description}
       const execResult = await this.adapter.executeCode(code, language, this.modelRef);
 
       const success = execResult.exitCode === 0;
-      this.emitEvent(EventAction.TOOL_CALL, {
-        tool_name: task.step.required_skill,
-        step_index: task.step.index,
-        status: success ? 'success' : 'failed',
-      }, undefined, task.act_id);
 
       // Phase 3: Output Truncation (Task 3.6)
       const rawStdout = execResult.stdout || '';
       const rawStderr = execResult.stderr || '';
       const finalOutputBuffer = `[Generated ${language} Code]:\n${code}\n\n[Execution Output]:\n${success ? rawStdout : (rawStderr || rawStdout || 'No output')}`;
-      
+      const finalOutput = truncateOutput(finalOutputBuffer);
+      const executionError = success ? undefined : (rawStderr || rawStdout || 'Unknown execution error');
+
+      this.emitEvent(EventAction.TOOL_CALL, {
+        tool_name: task.step.required_skill,
+        step_index: task.step.index,
+        status: success ? 'success' : 'failed',
+        output: finalOutput,
+        error: executionError,
+      }, undefined, task.act_id);
+
       return {
         task_id: task.task_id,
         step_index: task.step.index,
         status: success ? 'success' : 'failed',
-        output: truncateOutput(finalOutputBuffer),
-        error: success ? undefined : (rawStderr || rawStdout || 'Unknown execution error'),
+        output: finalOutput,
+        error: executionError,
         tokens_consumed: task.step.estimated_tokens,
       };
     } catch (err: unknown) {
