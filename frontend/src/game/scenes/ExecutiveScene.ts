@@ -3,10 +3,7 @@ import Phaser from 'phaser';
 import { soundManager } from '../SoundManager';
 
 export class ExecutiveScene extends BaseScene {
-  private president!: Phaser.GameObjects.Sprite;
-  private secretary!: Phaser.GameObjects.Sprite;
   private bill!: Phaser.GameObjects.Sprite;
-  private particleEmitter?: Phaser.GameObjects.Particles.ParticleEmitter;
 
   constructor() {
     super('ExecutiveScene');
@@ -14,29 +11,22 @@ export class ExecutiveScene extends BaseScene {
 
   create() {
     super.create();
-    this.cameras.main.fadeIn(300, 0, 0, 0);
+    this.cameras.main.fadeIn(600, 0, 0, 0);
+    const { width, height } = this.scale;
     
     // Background
-    this.add.image(400, 300, 'bg_executive');
+    const bg = this.add.image(width / 2, height / 2, 'bg_executive');
+    bg.setDisplaySize(width, height);
     
-    this.add.text(400, 50, '[ 行政签署厅 ]', {
+    this.add.text(width / 2, height * 0.08, '[ 行政签署厅 ]', {
       fontSize: '24px',
       color: '#00ccff',
       backgroundColor: '#000000',
       padding: { x: 10, y: 5 }
     }).setOrigin(0.5);
-    
-    // Characters
-    // President sprite sheet is 205x380
-    this.president = this.add.sprite(180, 400, 'mp_president').setOrigin(0.5);
-    this.president.play('president_idle');
-
-    // Secretary sprite sheet is 147x192
-    this.secretary = this.add.sprite(650, 450, 'mp_secretary').setOrigin(0.5);
-    this.secretary.play('secretary_idle');
 
     // Bill prop (hidden initially)
-    this.bill = this.add.sprite(180, 480, 'prop_bill').setOrigin(0.5).setDisplaySize(64, 64);
+    this.bill = this.add.sprite(width * 0.5, height * 0.61, 'prop_bill').setOrigin(0.5).setDisplaySize(Math.max(96 * (width/800), 48), Math.max(96 * (width/800), 48));
     this.bill.setVisible(false);
 
     // Generate smoke particle texture
@@ -45,24 +35,39 @@ export class ExecutiveScene extends BaseScene {
     g.fillRect(0, 0, 8, 8);
     g.generateTexture('smoke_particle', 8, 8);
     g.destroy();
+
+    // Test shortcuts
+    this.input.keyboard?.on('keydown-T', () => {
+      this.triggerToolCall('Checking system status...\nFound 3 anomalies.\nResolving node config.\nWait...\nProcess finished with exit code 0.');
+    });
+    this.input.keyboard?.on('keydown-S', () => {
+      this.triggerSign('Test Act');
+    });
+    this.input.keyboard?.on('keydown-V', () => {
+      this.triggerVeto();
+    });
+    this.input.keyboard?.on('keydown-E', () => {
+      this.triggerError();
+    });
   }
 
   public triggerSign(actName: string): Promise<void> {
+    const { width, height } = this.scale;
     return new Promise(resolve => {
       this.showNotification(`总统签署: ${actName}`);
-      this.president.play('president_sign');
       
       // Show 批准 stamp
-      const stamp = this.add.text(180, 440, '批准', {
-        fontSize: '32px', color: '#00ff00', fontStyle: 'bold', backgroundColor: '#003300'
-      }).setOrigin(0.5).setAlpha(0).setScale(2);
+      const tempScale = Math.max(width/800, 0.5);
+      const finalStampScale = tempScale * 0.5;
+      const stamp = this.add.sprite(width * 0.5, height * 0.61, 'ui_stamps', 1)
+        .setOrigin(0.5).setAlpha(0).setScale(finalStampScale * 4);
       
       soundManager.play('gavel');
 
       this.tweens.add({
         targets: stamp,
         alpha: 1,
-        scale: 1,
+        scale: finalStampScale,
         duration: 300,
         ease: 'Bounce.easeOut',
         onComplete: () => {
@@ -72,22 +77,25 @@ export class ExecutiveScene extends BaseScene {
       });
 
       this.time.delayedCall(1000, () => {
-        this.president.play('president_idle');
         resolve();
       });
     });
   }
 
   private rollBillToSecretary() {
-    this.bill.setPosition(180, 480);
+    const { width, height } = this.scale;
+    this.bill.setPosition(width * 0.5, height * 0.61);
     this.bill.setVisible(true);
     this.tweens.add({
       targets: this.bill,
-      x: 600,
+      x: width * 0.8,
+      y: height * 0.8,
+      alpha: 0,
       duration: 800,
       ease: 'Power1',
       onComplete: () => {
-        this.secretary.play('secretary_type');
+        this.bill.setVisible(false);
+        this.bill.setAlpha(1);
         // Output a rapid burst of typewriter sound
         this.time.addEvent({ delay: 60, callback: () => soundManager.play('typewriter', { volume: 1.0 }), repeat: 10 });
       }
@@ -95,28 +103,38 @@ export class ExecutiveScene extends BaseScene {
   }
 
   public triggerVeto(): Promise<void> {
+    const { width, height } = this.scale;
     return new Promise(resolve => {
       this.showNotification(`总统否决！`);
-      this.president.play('president_sign');
 
       soundManager.play('alert');
 
       // Red Stamp
-      const stamp = this.add.text(180, 440, '否决', {
-        fontSize: '48px', color: '#ff0000', fontStyle: 'bold', backgroundColor: '#550000'
-      }).setOrigin(0.5).setAlpha(0).setScale(3);
+      const tempScale = Math.max(width/800, 0.5);
+      const finalStampScale = tempScale * 0.5;
+      const stamp = this.add.sprite(width * 0.5, height * 0.61, 'ui_stamps', 0)
+        .setOrigin(0.5).setAlpha(0).setScale(finalStampScale * 5);
       
       this.tweens.add({
         targets: stamp,
         alpha: 1,
-        scale: 1,
+        scale: finalStampScale,
         duration: 200,
         onComplete: () => {
           this.cameras.main.shake(300, 0.015);
+          
+          const redOverlay = this.add.rectangle(0, 0, width, height, 0xff0000, 0.3).setOrigin(0);
+          this.tweens.add({
+              targets: redOverlay,
+              alpha: 0,
+              duration: 500,
+              onComplete: () => redOverlay.destroy()
+          });
+
           this.time.delayedCall(1000, () => stamp.destroy());
           
           // Roll bill backward
-          this.bill.setPosition(180, 480);
+          this.bill.setPosition(width * 0.5, height * 0.61);
           this.bill.setVisible(true);
           this.tweens.add({
             targets: this.bill,
@@ -128,16 +146,15 @@ export class ExecutiveScene extends BaseScene {
       });
 
       this.time.delayedCall(1500, () => {
-        this.president.play('president_idle');
         resolve();
       });
     });
   }
 
   public triggerToolCall(logs: string): Promise<void> {
+    const { width, height } = this.scale;
     return new Promise(resolve => {
       this.showNotification(`正在执行指令…`);
-      this.secretary.play('secretary_type');
 
       // Continuous typing sound for the duration of the waterfall
       const typeTimer = this.time.addEvent({
@@ -147,52 +164,71 @@ export class ExecutiveScene extends BaseScene {
       });
 
       // Code waterfall CLI log
-      const logText = this.add.text(650, 400, logs, {
-        fontSize: '14px', color: '#00ff00', fontFamily: 'monospace', align: 'left', wordWrap: { width: 250 }, backgroundColor: '#000000'
-      }).setOrigin(0.5).setAlpha(0.8);
+      const logLines = logs.split('\n').filter(l => l.trim().length > 0).slice(0, 8);
+      let completed = 0;
+      let delay = 0;
 
-      this.tweens.add({
-        targets: logText,
-        y: logText.y - 150,
-        alpha: 0,
-        duration: 2500,
-        ease: 'Linear',
-        onComplete: () => {
-          logText.destroy();
-          typeTimer.remove(); // Clear timer
-          resolve();
-        }
+      if (logLines.length === 0) {
+        typeTimer.remove();
+        return resolve();
+      }
+
+      logLines.forEach((line, index) => {
+        this.time.delayedCall(delay, () => {
+          const logText = this.add.text(width * 0.5, height * 0.45 + index * 20, line, {
+            fontSize: '12px', color: '#00ff00', fontFamily: 'monospace', align: 'left', padding: { x: 4, y: 2 }, wordWrap: { width: Math.min(width * 0.4, 300) }, backgroundColor: 'rgba(0,0,0,0.8)'
+          }).setOrigin(0.5).setAlpha(0);
+
+          this.tweens.add({
+            targets: logText,
+            y: logText.y - height * 0.1,
+            alpha: 1,
+            duration: 300,
+            ease: 'Power2',
+            onComplete: () => {
+              this.time.delayedCall(1200, () => {
+                this.tweens.add({
+                  targets: logText,
+                  alpha: 0,
+                  y: logText.y - height * 0.05,
+                  duration: 500,
+                  onComplete: () => {
+                    logText.destroy();
+                    completed++;
+                    if (completed === logLines.length) {
+                      typeTimer.remove();
+                      resolve();
+                    }
+                  }
+                });
+              });
+            }
+          });
+        });
+        delay += 200;
       });
     });
   }
 
   public triggerError(): Promise<void> {
+    const { width, height } = this.scale;
     return new Promise(resolve => {
       this.showNotification(`执行异常！`);
-      this.secretary.setTint(0xff5555);
-      this.secretary.play('secretary_burn');
       
+      this.cameras.main.shake(500, 0.015);
+      const redOverlay = this.add.rectangle(0, 0, width, height, 0xff0000, 0.3).setOrigin(0).setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+          targets: redOverlay,
+          alpha: 0,
+          yoyo: true,
+          repeat: 3,
+          duration: 300,
+          onComplete: () => redOverlay.destroy()
+      });
+
       soundManager.play('alert');
 
-      if (!this.particleEmitter) {
-        this.particleEmitter = this.add.particles(this.secretary.x, this.secretary.y - 50, 'smoke_particle', {
-          tint: [0x222222, 0x444444, 0x777777],
-          speed: { min: 20, max: 60 },
-          angle: { min: 250, max: 290 },
-          scale: { start: 1, end: 0.1 },
-          alpha: { start: 0.8, end: 0 },
-          lifespan: 2000,
-          frequency: 80,
-          blendMode: 'NORMAL'
-        });
-      } else {
-        this.particleEmitter.start();
-      }
-
       this.time.delayedCall(2500, () => {
-        if (this.particleEmitter) this.particleEmitter.stop();
-        this.secretary.clearTint();
-        this.secretary.play('secretary_idle');
         resolve();
       });
     });

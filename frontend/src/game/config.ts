@@ -6,10 +6,10 @@ import { JudicialScene } from './scenes/JudicialScene';
 
 export const GameConfig: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
-    width: 800,
-    height: 600,
-    parent: 'game-container',
-    backgroundColor: '#000000',
+    width: 1280,
+    height: 720,
+    parent: 'phaser-container',
+    transparent: true,
     pixelArt: true, // Crucial for pixel-perfect SNES retro aesthetics
     antialias: false,
     roundPixels: true,

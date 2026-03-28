@@ -2,75 +2,75 @@ import Phaser from 'phaser';
 import { soundManager } from '../SoundManager';
 
 export class ParliamentScene extends Phaser.Scene {
-    private conservativeMP!: Phaser.GameObjects.Sprite;
-    private radicalMP!: Phaser.GameObjects.Sprite;
-    private speakerMP!: Phaser.GameObjects.Sprite;
+    private activeBubbles: Map<string, Phaser.GameObjects.Container> = new Map();
+    private positions: { [key: string]: { x: number, y: number } } = {};
+
     constructor() {
         super('ParliamentScene');
     }
 
     create() {
-        this.cameras.main.fadeIn(300, 0, 0, 0);
+        this.cameras.main.fadeIn(600, 0, 0, 0);
         const { width, height } = this.scale;
 
         // 1. Background (stretched to fill)
         const bg = this.add.image(width / 2, height / 2, 'bg_parliament');
         bg.setDisplaySize(width, height);
 
-        // 2. Speaker (upper center)
-        this.speakerMP = this.add.sprite(width * 0.5, height * 0.3, 'mp_speaker');
-        this.speakerMP.setScale(0.4);
-        this.speakerMP.play('speaker_idle');
+        // 2. Define virtual positions for factions (no sprites anymore)
+        this.positions = {
+            speaker: { x: width * 0.5, y: height * 0.3 },
+            radical: { x: width * 0.25, y: height * 0.75 },
+            conservative: { x: width * 0.75, y: height * 0.75 }
+        };
 
-        // 3. Radical MP (left side — "red/radical" faction)
-        this.radicalMP = this.add.sprite(width * 0.25, height * 0.75, 'mp_radical');
-        this.radicalMP.setScale(0.5);
-        this.radicalMP.play('radical_idle');
-
-        // 4. Conservative MP (right side — "blue/conservative" faction)
-        this.conservativeMP = this.add.sprite(width * 0.75, height * 0.75, 'mp_conservative');
-        this.conservativeMP.setScale(0.25);
-        this.conservativeMP.setFlipX(true);
-        this.conservativeMP.play('conservative_idle');
-
-        // 5. Spacebar debug trigger
+        // 3. Spacebar & Debug hotkeys trigger
         if (this.input?.keyboard) {
             this.input.keyboard.on('keydown-SPACE', () => {
                 soundManager.play('gavel');
-                this.speakerMP.play('speaker_hammer');
-                this.speakerMP.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
-                    this.speakerMP.play('speaker_idle');
-                });
+            });
+            
+            // Debug actions for new features
+            this.input.keyboard.on('keydown-P', () => {
+                this.triggerPropose('radical', '【提案测试】这是一项激进的提案。请注意卷轴是否从下方成功飞入！');
+            });
+            
+            this.input.keyboard.on('keydown-D', () => {
+                this.triggerDebate('conservative', '【辩论测试】这非常荒谬！请注意我的发言框应该呈现浅蓝色。');
+            });
+            
+            this.input.keyboard.on('keydown-B', () => {
+                this.triggerBrawl(8); // Test max intensity brawl
             });
         }
     }
 
     // ──────────────────────────────────────────────
-    //  Helper: get MP sprite by faction string
+    //  Helper: get string key for faction
     // ──────────────────────────────────────────────
-    private getMPByFaction(faction?: string): Phaser.GameObjects.Sprite | null {
-        if (!faction) return this.conservativeMP;
-        if (faction.toLowerCase().includes('radical')) return this.radicalMP;
-        if (faction.toLowerCase().includes('conservative')) return this.conservativeMP;
-        return this.conservativeMP;
+    private getFactionKey(faction?: string): string {
+        if (!faction) return 'conservative';
+        if (faction.toLowerCase().includes('radical')) return 'radical';
+        if (faction.toLowerCase().includes('conservative')) return 'conservative';
+        return 'conservative';
     }
-
-    private activeBubbles: Map<Phaser.GameObjects.Sprite, Phaser.GameObjects.Container> = new Map();
 
     // ──────────────────────────────────────────────
     //  Typewriter text bubble
     // ──────────────────────────────────────────────
     private showTextBubble(
-        sourceSprite: Phaser.GameObjects.Sprite,
+        faction: string,
         text: string,
         type: 'propose' | 'debate',
         charDelay: number = 40
     ): Promise<void> {
         return new Promise((resolve) => {
+            const factionKey = this.getFactionKey(faction);
+
             // Destroy any existing bubble for this speaker
-            if (this.activeBubbles.has(sourceSprite)) {
-                this.activeBubbles.get(sourceSprite)?.destroy();
-                this.activeBubbles.delete(sourceSprite);
+            if (this.activeBubbles.has(factionKey)) {
+                this.activeBubbles.get(factionKey)?.destroy();
+                this.activeBubbles.delete(factionKey);
             }
 
             // Target max 5 seconds for typing, adjusting charDelay
@@ -80,17 +80,26 @@ export class ParliamentScene extends Phaser.Scene {
                 charDelay = Math.max(charDelay, 2); 
             }
 
-            const x = sourceSprite.x;
-            const y = sourceSprite.y - (sourceSprite.displayHeight / 2) - 40;
+            const pos = this.positions[factionKey];
+            const x = pos.x;
+            const y = pos.y - 120; // Offset upwards since there's no sprite
 
             const boxWidth = 320;
-            const boxHeight = 300; // 现为原来的 2.5 倍高
+            const boxHeight = 300;
             const padding = 10;
             const innerWidth = boxWidth - padding * 2;
 
             const container = this.add.container(x, y).setDepth(100);
 
-            const bgColor = type === 'propose' ? 0xffffff : 0xe0f7fa;
+            let bgColor = 0xffffff;
+            if (type === 'debate') {
+                if (factionKey === 'radical') {
+                    bgColor = 0xfff0f0; // Radical: light red
+                } else if (factionKey === 'conservative') {
+                    bgColor = 0xf0f0ff; // Conservative: light blue
+                }
+            }
+            
             const bgGraphics = this.add.graphics();
             bgGraphics.fillStyle(bgColor, 0.95);
             bgGraphics.lineStyle(1, 0x000000, 0.2);
@@ -103,7 +112,7 @@ export class ParliamentScene extends Phaser.Scene {
             const geometryMask = maskGraphics.createGeometryMask();
 
             const textObj = this.add.text(-boxWidth / 2 + padding, -boxHeight + padding, '', {
-                fontSize: '14px',
+                fontSize: '16px',
                 color: '#000000',
                 wordWrap: { width: innerWidth, useAdvancedWrap: true }
             });
@@ -115,7 +124,7 @@ export class ParliamentScene extends Phaser.Scene {
                 .setInteractive({ useHandCursor: true });
             container.add(zone);
 
-            this.activeBubbles.set(sourceSprite, container);
+            this.activeBubbles.set(factionKey, container);
 
             let isDragging = false;
             let startY = 0;
@@ -187,15 +196,18 @@ export class ParliamentScene extends Phaser.Scene {
     // ──────────────────────────────────────────────
     //  Projectile system (shoe / coffee cup)
     // ──────────────────────────────────────────────
-    private launchProjectile(fromSprite: Phaser.GameObjects.Sprite, toSprite: Phaser.GameObjects.Sprite) {
+    private launchProjectile(fromFaction: string, toFaction: string) {
+        const fromPos = this.positions[fromFaction];
+        const toPos = this.positions[toFaction];
+
         // Pick random projectile type: frame 0 = shoe, frame 1 = coffee cup
         const frame = Phaser.Math.Between(0, 1);
-        const projectile = this.physics.add.sprite(fromSprite.x, fromSprite.y - 30, 'prop_projectiles', frame);
+        const projectile = this.physics.add.sprite(fromPos.x, fromPos.y - 30, 'prop_projectiles', frame);
         projectile.setScale(0.12);
         projectile.setDepth(90);
 
         // Calculate velocity for parabolic arc (gravity is y:300 from config)
-        const dx = toSprite.x - fromSprite.x;
+        const dx = toPos.x - fromPos.x;
         const vx = dx * 1.2;  // horizontal speed
         const vy = -250;      // upward launch
 
@@ -209,16 +221,17 @@ export class ParliamentScene extends Phaser.Scene {
             repeat: -1
         });
 
+        // Use invisible zone instead of sprite for overlap
+        const targetZone = this.add.zone(toPos.x, toPos.y - 60, 100, 100);
+        this.physics.add.existing(targetZone);
+
         // Overlap detection with target
-        this.physics.add.overlap(projectile, toSprite, () => {
+        this.physics.add.overlap(projectile, targetZone, () => {
             // Guard: only trigger once
             if (!projectile.body) return;
             projectile.body.enable = false;
 
             soundManager.play('hit', { volume: 0.6 });
-            // Hit flash on target
-            toSprite.setTint(0xffffff);
-            this.time.delayedCall(150, () => toSprite.clearTint());
 
             // Destroy projectile with a quick pop
             this.tweens.add({
@@ -226,13 +239,17 @@ export class ParliamentScene extends Phaser.Scene {
                 scale: 0,
                 alpha: 0,
                 duration: 150,
-                onComplete: () => projectile.destroy()
+                onComplete: () => {
+                    projectile.destroy();
+                    targetZone.destroy();
+                }
             });
         });
 
         // Auto-destroy if it falls off screen
         this.time.delayedCall(3000, () => {
             if (projectile.active) projectile.destroy();
+            if (targetZone.active) targetZone.destroy();
         });
     }
 
@@ -241,17 +258,32 @@ export class ParliamentScene extends Phaser.Scene {
     // ──────────────────────────────────────────────
     public async triggerPropose(faction: string, text: string): Promise<void> {
         console.log(`[ParliamentScene] Propose from ${faction}: ${text}`);
-        const mp = this.getMPByFaction(faction);
-        if (mp) {
-            const animKey = faction.toLowerCase().includes('conservative') ? 'conservative_talk' : 'radical_talk';
-            mp.play(animKey);
-            await this.showTextBubble(mp, text, 'propose');
+        const factionKey = this.getFactionKey(faction);
+        const pos = this.positions[factionKey];
+        
+        // Scroll fly-in animation
+        const scroll = this.add.sprite(this.scale.width / 2, this.scale.height + 50, 'prop_bill');
+        scroll.setDepth(150);
+        
+        // Dynamically size the scroll so it's not gigantic
+        const billSize = Math.max(120 * (this.scale.width / 800), 80);
+        scroll.setDisplaySize(billSize, billSize);
 
-            this.time.delayedCall(2000, () => {
-                const idleKey = faction.toLowerCase().includes('conservative') ? 'conservative_idle' : 'radical_idle';
-                mp.play(idleKey);
+        await new Promise<void>((resolve) => {
+            this.tweens.add({
+                targets: scroll,
+                x: pos.x,
+                y: pos.y - 20,
+                duration: 600,
+                ease: 'Power2',
+                onComplete: () => {
+                    scroll.destroy();
+                    resolve();
+                }
             });
-        }
+        });
+
+        await this.showTextBubble(faction, text, 'propose');
     }
 
     // ──────────────────────────────────────────────
@@ -259,17 +291,7 @@ export class ParliamentScene extends Phaser.Scene {
     // ──────────────────────────────────────────────
     public async triggerDebate(faction: string, text: string): Promise<void> {
         console.log(`[ParliamentScene] Debate from ${faction}: ${text}`);
-        const mp = this.getMPByFaction(faction);
-        if (mp) {
-            const animKey = faction.toLowerCase().includes('conservative') ? 'conservative_talk' : 'radical_talk';
-            mp.play(animKey);
-            await this.showTextBubble(mp, text, 'debate');
-
-            this.time.delayedCall(2000, () => {
-                const idleKey = faction.toLowerCase().includes('conservative') ? 'conservative_idle' : 'radical_idle';
-                mp.play(idleKey);
-            });
-        }
+        await this.showTextBubble(faction, text, 'debate');
     }
 
     // ──────────────────────────────────────────────
@@ -282,7 +304,7 @@ export class ParliamentScene extends Phaser.Scene {
             // ── Mild conflict (Lv1): rapid overlapping dialogue ──
             await this.triggerMildConflict();
         } else {
-            // ── Physical conflict (Lv2-3): tint + projectiles + shake ──
+            // ── Physical conflict (Lv2-3): projectiles + shake ──
             await this.triggerPhysicalConflict(intensity);
         }
     }
@@ -295,20 +317,12 @@ export class ParliamentScene extends Phaser.Scene {
 
         // Conservative fires rapid text
         const cText = insults[Phaser.Math.Between(0, insults.length - 1)];
-        this.showTextBubble(this.conservativeMP, cText, 'debate', 15);
-        this.conservativeMP.play('conservative_talk');
+        this.showTextBubble('conservative', cText, 'debate', 15);
 
         // Radical fires back after short delay
         this.time.delayedCall(300, () => {
             const rText = radicalInsults[Phaser.Math.Between(0, radicalInsults.length - 1)];
-            this.showTextBubble(this.radicalMP, rText, 'debate', 15);
-            this.radicalMP.play('radical_talk');
-        });
-
-        // Back to idle
-        this.time.delayedCall(2000, () => {
-            this.conservativeMP.play('conservative_idle');
-            this.radicalMP.play('radical_idle');
+            this.showTextBubble('radical', rText, 'debate', 15);
         });
 
         // Mild shake
@@ -319,9 +333,16 @@ export class ParliamentScene extends Phaser.Scene {
 
     private async triggerPhysicalConflict(intensity: number): Promise<void> {
         soundManager.play('murmur');
-        // Red tint on both MPs
-        this.conservativeMP.setTint(0xff4444);
-        this.radicalMP.setTint(0xff4444);
+
+        if (intensity >= 8) {
+            // Highest severity: Speaker slacks hammer 3 times with heavy shakes
+            for (let i = 0; i < 3; i++) {
+                this.time.delayedCall(i * 400, () => {
+                    soundManager.play('gavel');
+                    this.cameras.main.shake(200, 0.05); // High intensity shake
+                });
+            }
+        }
 
         // Strong camera shake
         const shakeIntensity = Math.min(intensity * 0.005, 0.04);
@@ -333,24 +354,12 @@ export class ParliamentScene extends Phaser.Scene {
             this.time.delayedCall(i * 400, () => {
                 // Alternate direction
                 if (i % 2 === 0) {
-                    this.launchProjectile(this.radicalMP, this.conservativeMP);
+                    this.launchProjectile('radical', 'conservative');
                 } else {
-                    this.launchProjectile(this.conservativeMP, this.radicalMP);
+                    this.launchProjectile('conservative', 'radical');
                 }
             });
         }
-
-        // Play animations
-        this.conservativeMP.play('conservative_hammer');
-        this.conservativeMP.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
-            this.conservativeMP.play('conservative_idle');
-        });
-
-        // Clear tint after the action
-        this.time.delayedCall(2500, () => {
-            this.conservativeMP.clearTint();
-            this.radicalMP.clearTint();
-        });
 
         await new Promise(resolve => this.time.delayedCall(2500, resolve));
     }
@@ -363,12 +372,6 @@ export class ParliamentScene extends Phaser.Scene {
             console.log(`[ParliamentScene] 肃静！`);
             
             soundManager.play('gavel');
-
-            // Speaker slams hammer
-            this.speakerMP.play('speaker_hammer');
-            this.speakerMP.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
-                this.speakerMP.play('speaker_idle');
-            });
 
             // Big camera shake
             this.cameras.main.shake(400, 0.025);
@@ -405,12 +408,6 @@ export class ParliamentScene extends Phaser.Scene {
                 duration: 300,
                 onComplete: () => flash.destroy()
             });
-
-            // Force all MPs back to calm
-            this.conservativeMP.clearTint();
-            this.radicalMP.clearTint();
-            this.conservativeMP.play('conservative_idle');
-            this.radicalMP.play('radical_idle');
             
             this.time.delayedCall(1500, resolve);
         });
@@ -424,11 +421,6 @@ export class ParliamentScene extends Phaser.Scene {
             console.log(`[ParliamentScene] 表决通过！`);
             
             soundManager.play('gavel');
-
-            // All characters glow green
-            this.conservativeMP.setTint(0x00ff00);
-            this.radicalMP.setTint(0x00ff00);
-            this.speakerMP.setTint(0x00ff00);
 
             // Green overlay
             const overlay = this.add.rectangle(
@@ -455,9 +447,6 @@ export class ParliamentScene extends Phaser.Scene {
                 ease: 'Bounce'
             });
 
-            // Speaker hammer (ceremonial)
-            this.speakerMP.play('speaker_hammer');
-
             // Stamp image (centered, bounce in) — frame 0=VETO, frame 1=APPROVED
             const stamp = this.add.sprite(
                 this.scale.width / 2, this.scale.height / 2 + 60, 'ui_stamps', 1
@@ -473,18 +462,19 @@ export class ParliamentScene extends Phaser.Scene {
                 });
             });
 
-            // Transition to Executive Scene after celebration
-            this.time.delayedCall(3500, () => {
-                this.cameras.main.fadeOut(600, 0, 0, 0);
-                this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
-                    overlay.destroy();
-                    passedText.destroy();
-                    stamp.destroy();
-                    this.conservativeMP.clearTint();
-                    this.radicalMP.clearTint();
-                    this.speakerMP.clearTint();
-                    this.scene.start('ExecutiveScene');
+            // Transition handling delegated to SceneManager over global events via web sockets
+            this.time.delayedCall(2000, () => {
+                this.tweens.add({
+                    targets: [passedText, stamp, overlay],
+                    alpha: 0,
+                    duration: 500,
+                    onComplete: () => {
+                        overlay.destroy();
+                        passedText.destroy();
+                        stamp.destroy();
+                    }
                 });
+                // Note: we don't start the scene here anymore, the orchestrator/ws-manager handles state flow
                 resolve();
             });
         });

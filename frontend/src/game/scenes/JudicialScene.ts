@@ -3,7 +3,6 @@ import Phaser from 'phaser';
 import { soundManager } from '../SoundManager';
 
 export class JudicialScene extends BaseScene {
-  private justice!: Phaser.GameObjects.Sprite;
   private bill!: Phaser.GameObjects.Sprite;
   private redOverlay!: Phaser.GameObjects.Rectangle;
   private redParticleEmitter?: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -15,34 +14,34 @@ export class JudicialScene extends BaseScene {
 
   create() {
     super.create();
-    this.cameras.main.fadeIn(300, 0, 0, 0);
+    this.cameras.main.fadeIn(600, 0, 0, 0);
+    const { width, height } = this.scale;
     
     // Background - black canvas with court bg
-    this.add.rectangle(400, 300, 800, 600, 0x000000);
-    const bg = this.add.image(400, 300, 'bg_court');
+    this.add.rectangle(width / 2, height / 2, width, height, 0x000000);
+    const bg = this.add.image(width / 2, height / 2, 'bg_court');
+    bg.setDisplaySize(width, height);
     bg.setAlpha(0.5); // Dim background
 
-    this.add.text(400, 50, '[ 最高法院 ]', {
+    this.add.text(width / 2, height * 0.08, '[ 最高法院 ]', {
       fontSize: '24px',
       color: '#ff00ff',
       backgroundColor: '#000000',
       padding: { x: 10, y: 5 }
     }).setOrigin(0.5);
     
-    // Justice sprite sheet is 439x286
-    this.justice = this.add.sprite(400, 200, 'mp_chief_justice').setOrigin(0.5);
-    this.justice.play('justice_idle');
-
     // Bill prop glowing
-    this.bill = this.add.sprite(400, 450, 'prop_bill').setOrigin(0.5).setDisplaySize(64, 64);
+    this.bill = this.add.sprite(width / 2, height * 0.6, 'prop_bill').setOrigin(0.5);
+    const billSize = Math.max(120 * (width/800), 80);
+    this.bill.setDisplaySize(billSize, billSize);
 
-    // Spotlight Graphic over Justice and Bill
+    // Spotlight Graphic over Bill
     const spotlight = this.add.graphics();
     spotlight.fillStyle(0xffffff, 0.1);
-    spotlight.fillTriangle(400, 50, 200, 500, 600, 500);
+    spotlight.fillTriangle(width / 2, 0, width * 0.35, height * 0.8, width * 0.65, height * 0.8);
 
     // Red Overlay for unconstitutional strobe
-    this.redOverlay = this.add.rectangle(400, 300, 800, 600, 0xff0000).setAlpha(0).setDepth(10);
+    this.redOverlay = this.add.rectangle(width / 2, height / 2, width, height, 0xff0000).setAlpha(0).setDepth(10);
 
     // Particles setup (1px particles)
     const gp = this.add.graphics();
@@ -53,49 +52,61 @@ export class JudicialScene extends BaseScene {
   }
 
   public triggerConstitutional(): Promise<void> {
+    const { width, height } = this.scale;
     return new Promise(resolve => {
       this.resetSceneState();
       this.showNotification(`审查完毕：合宪`);
       
-      this.justice.play('justice_hammer');
+      soundManager.play('gavel');
+      this.cameras.main.shake(150, 0.01);
       
-      this.time.delayedCall(200, () => {
-        soundManager.play('gavel');
-        this.cameras.main.shake(150, 0.01);
-        
-        const stamp = this.add.text(400, 450, '合宪', {
-          fontSize: '48px', color: '#00ff00', fontStyle: 'bold', backgroundColor: '#003300'
-        }).setOrigin(0.5).setAlpha(0).setScale(3).setDepth(20);
-        
-        this.tweens.add({
-          targets: stamp,
-          alpha: 1,
-          scale: 1,
-          duration: 300,
-          ease: 'Bounce.easeOut',
-          onComplete: () => {
-            this.time.delayedCall(1500, () => stamp.destroy());
-          }
-        });
+      const stampScale = Math.max(width/800, 1.0);
+      const stamp = this.add.text(width / 2, height * 0.6, ' [ 合 宪 ] ', {
+        fontSize: '64px', color: '#00ff00', fontStyle: 'bold', stroke: '#000000', strokeThickness: 8
+      }).setOrigin(0.5).setAlpha(0).setScale(stampScale * 4).setDepth(20);
+      
+      this.tweens.add({
+        targets: stamp,
+        alpha: 1,
+        scale: stampScale,
+        duration: 300,
+        ease: 'Bounce.easeOut',
+        onComplete: () => {
+          this.time.delayedCall(1500, () => stamp.destroy());
+        }
       });
 
       this.time.delayedCall(2000, () => {
-        this.justice.play('justice_idle');
         resolve();
       });
     });
   }
 
   public triggerUnconstitutional(): Promise<void> {
+    const { width, height } = this.scale;
     return new Promise(resolve => {
       this.resetSceneState();
       this.showNotification(`审查完毕：违宪！`);
       
-      this.justice.play('justice_hammer');
-      
-      this.time.delayedCall(100, () => soundManager.play('gavel'));
+      soundManager.play('gavel');
       this.time.delayedCall(500, () => soundManager.play('alert'));
       this.cameras.main.shake(600, 0.015);
+
+      const stampScale = Math.max(width/800, 1.0);
+      const stamp = this.add.text(width / 2, height * 0.6, ' [ 违 宪 ] ', {
+        fontSize: '72px', color: '#ff0000', fontStyle: 'bold', stroke: '#000000', strokeThickness: 10
+      }).setOrigin(0.5).setAlpha(0).setScale(stampScale * 5).setDepth(20);
+
+      this.tweens.add({
+        targets: stamp,
+        alpha: 1,
+        scale: stampScale,
+        duration: 300,
+        ease: 'Bounce.easeOut',
+        onComplete: () => {
+          this.time.delayedCall(2500, () => stamp.destroy());
+        }
+      });
 
       // 1. Red Strobe Light Overlay (Smooth down the flashes)
       this.tweens.add({
@@ -111,11 +122,13 @@ export class JudicialScene extends BaseScene {
 
       // 2. Traceback Waterfall
       if (!this.redParticleEmitter) {
-        this.redParticleEmitter = this.add.particles(400, 0, 'tiny_particle', {
+        this.redParticleEmitter = this.add.particles(width / 2, 0, 'tiny_particle', {
           tint: 0xff0000,
-          speedY: { min: 200, max: 400 },
-          speedX: { min: -50, max: 50 },
-          emitZone: { type: 'random', source: new Phaser.Geom.Rectangle(-400, -50, 800, 50) as any },
+          speedY: { min: 200 * height/600, max: 400 * height/600 },
+          // random spread across width
+          speedX: { min: -100, max: 100 },
+          // @ts-expect-error - Phaser types are misaligned for emitZone source
+          emitZone: { type: 'random', source: new Phaser.Geom.Rectangle(-width/2, -50, width, 50) },
           scale: { start: 1, end: 0.5 },
           lifespan: 2000,
           frequency: 5,
@@ -129,7 +142,6 @@ export class JudicialScene extends BaseScene {
       this.time.delayedCall(3000, () => {
           if(this.redParticleEmitter) this.redParticleEmitter.stop();
           this.redOverlay.setAlpha(0);
-          this.justice.play('justice_idle');
           resolve();
       });
 
@@ -139,7 +151,7 @@ export class JudicialScene extends BaseScene {
         if (!this.fireEmitter) {
           this.fireEmitter = this.add.particles(this.bill.x, this.bill.y, 'tiny_particle', {
             tint: [0xff4400, 0xff0000, 0x555555],
-            speed: { min: 50, max: 150 },
+            speed: { min: 50 * height/600, max: 150 * height/600 },
             angle: { min: 250, max: 290 },
             scale: { start: 2, end: 0.1 },
             alpha: { start: 1, end: 0 },
@@ -168,11 +180,13 @@ export class JudicialScene extends BaseScene {
 
   // Override to reset state easily if needed
   private resetSceneState() {
+    const { width } = this.scale;
     this.redOverlay.setAlpha(0);
     this.bill.clearTint();
-    this.bill.setScale(1);  // This will override setDisplaySize unfortunately, wait, no, we should preserve display size by not using setScale or resetting DisplaySize.
-    this.bill.setDisplaySize(64, 64);
     this.bill.setAlpha(1);
+    const billSize = Math.max(120 * (width/800), 80);
+    this.bill.setDisplaySize(billSize, billSize);
+    this.bill.setScale(1);  // Reset scale explicitly just in case display size uses it
     this.tweens.killTweensOf(this.redOverlay);
     this.tweens.killTweensOf(this.bill);
     if(this.redParticleEmitter) this.redParticleEmitter.stop();

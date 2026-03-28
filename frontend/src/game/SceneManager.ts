@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
+import { soundManager } from './SoundManager';
 
 export class SceneManager {
   private game: Phaser.Game;
+  private isTransitioning: boolean = false;
 
   constructor(game: Phaser.Game) {
     this.game = game;
@@ -39,6 +41,11 @@ export class SceneManager {
   private currentTaskId: string | null = null;
 
   public switchTo(status: string, taskId?: string) {
+    if (this.isTransitioning) {
+        console.log(`[SceneManager] Ignoring switch to ${status} because a transition is already in progress.`);
+        return;
+    }
+
     const normalizedStatus = status ? status.toUpperCase() : '';
     const targetScene = SceneManager.SCENE_MAP[normalizedStatus] ?? 
                         SceneManager.SCENE_MAP[status] ?? 
@@ -51,12 +58,38 @@ export class SceneManager {
 
     if (currentScene.scene.key !== targetScene) {
       console.log(`[SceneManager] Switching from ${currentScene.scene.key} to ${targetScene}`);
-      currentScene.scene.start(targetScene);
-      if (taskId) this.currentTaskId = taskId;
+      this.isTransitioning = true;
+      
+      // Stop ongoing transitions/tweens globally before fading if we want, but fadeOut is enough
+      currentScene.cameras.main.fadeOut(600, 0, 0, 0);
+      currentScene.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+          soundManager.stopAll();
+          currentScene.scene.start(targetScene);
+          if (taskId) this.currentTaskId = taskId;
+          
+          const newScene = this.game.scene.getScene(targetScene);
+          if (newScene) {
+             // Will trigger after start
+             this.game.events.once('step', () => {
+                 this.isTransitioning = false;
+             });
+          } else {
+             this.isTransitioning = false;
+          }
+      });
     } else if (isDifferentTask) {
       console.log(`[SceneManager] Restarting ${targetScene} for new task ${taskId}`);
-      currentScene.scene.restart();
-      if (taskId) this.currentTaskId = taskId;
+      this.isTransitioning = true;
+      currentScene.cameras.main.fadeOut(600, 0, 0, 0);
+      currentScene.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+          soundManager.stopAll();
+          currentScene.scene.restart();
+          if (taskId) this.currentTaskId = taskId;
+          
+          this.game.events.once('step', () => {
+             this.isTransitioning = false;
+          });
+      });
     }
   }
 }

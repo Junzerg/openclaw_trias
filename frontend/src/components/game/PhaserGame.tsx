@@ -38,7 +38,7 @@ const PhaserGame = forwardRef<PhaserGameRef, Record<string, never>>((_props, ref
   return (
     <div 
       id="phaser-container" 
-      className="w-[800px] h-[600px] rounded-lg shadow-2xl overflow-hidden ring-4 ring-gray-700"
+      className="w-full h-full overflow-hidden bg-(--color-bg-primary)"
     />
   );
 });

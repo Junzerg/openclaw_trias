@@ -101,12 +101,57 @@ body {
   font-family: var(--font-mono);
 }
 
+/* Header Navigation Tabs (Task 4.9) */
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.header-tab {
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 5px 14px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.header-tab:hover {
+  color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.header-tab.active {
+  color: var(--color-text-primary);
+  background: rgba(99, 102, 241, 0.2);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.15);
+}
+
 .status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   display: inline-block;
   box-shadow: 0 0 8px currentColor;
+}
+
+/* Task 4.8: Reconnecting pulse animation */
+.status-dot.pulse {
+  animation: status-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
 }
 
 .app-main {
@@ -231,7 +276,7 @@ body {
   flex-direction: column;
   flex-grow: 1;
   overflow: hidden;
-  background-color: var(--color-bg-primary);
+  background-color: var(--color-bg-secondary); /* Matches general app background instead of ultra-dark primary */
 }
 
 .canvas-container {
