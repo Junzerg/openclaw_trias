@@ -1,0 +1,68 @@
+# OS Files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.idea/
+.vscode/
+.cursor/
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Build Output
+dist/
+build/
+frontend/dist/
+backend/dist/
+frontend/.vite/
+
+# Database & Runtime Data
+data/
+backend/data/
+*.db
+*.sqlite
+*.sqlite3
+.openclaw/
+
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs/
+*.log
+backend/app.log
+backend/backend.log
+
+# Type Checking & Linting
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+.eslintcache
+
+# Docker
+docker-compose.override.yml

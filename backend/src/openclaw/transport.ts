@@ -1,0 +1,270 @@
+/**
+ * OpenClaw Transport Layer — Abstraction for CLI / WebSocket communication
+ *
+ * Phase 3.1: `CliTransport` uses `child_process.spawn` (async, non-blocking).
+ * Phase 4:   `WebSocketTransport` will implement the same `ITransport` interface
+ *            for direct Gateway streaming — zero changes to `OpenClawAdapter`.
+ */
+
+import { spawn, type ChildProcess } from 'node:child_process';
+
+// ─── Interface ───────────────────────────────────────────────────────────────
+
+export interface ITransport {
+  /** Send a command and wait for the complete response. */
+  send(args: string[], timeoutMs: number, env?: NodeJS.ProcessEnv): Promise<string>;
+
+  /**
+   * Send a command and yield stdout chunks as they arrive (streaming mode).
+   * Falls back to a single-chunk yield of the complete output if not implemented.
+   */
+  sendStreaming?(args: string[], timeoutMs: number, env?: NodeJS.ProcessEnv): AsyncGenerator<string, string, unknown>;
+
+  /**
+   * Register a progress callback. Called every ~3 s while a command is running.
+   * Useful for pushing heartbeat events during long LLM calls.
+   */
+  onProgress?(callback: (elapsedMs: number) => void): void;
+
+  /** Clean up resources (kill lingering processes, close sockets, etc.). */
+  dispose?(): void;
+}
+
+// ─── CLI Transport ───────────────────────────────────────────────────────────
+
+/** Maximum output buffer size (bytes). Matches the old execSync maxBuffer. */
+const MAX_BUFFER = 10 * 1024 * 1024; // 10 MB
+
+export class CliTransport implements ITransport {
+  private cliBin: string;
+  private progressCallback?: (elapsedMs: number) => void;
+
+  constructor(cliBin: string = 'openclaw') {
+    this.cliBin = cliBin;
+  }
+
+  onProgress(callback: (elapsedMs: number) => void): void {
+    this.progressCallback = callback;
+  }
+
+  async send(args: string[], timeoutMs: number, env?: NodeJS.ProcessEnv): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      // Spawn the CLI binary directly — no bash wrapper.
+      // This ensures SIGTERM on timeout kills the actual process (not just a
+      // bash shell), and avoids orphaned child processes.  Node.js's execvp
+      // handles PATH lookup, so no shell is needed.
+      const child: ChildProcess = spawn(
+        this.cliBin,
+        args,
+        { 
+          env: env ? { ...process.env, ...env } : { ...process.env },
+          detached: true // Bug Fix: 启用独立进程组以支持树形清理，防止子进程泄漏
+        },
+      );
+
+      let output = '';
+      let outputBytes = 0;
+      let settled = false;
+
+      const settle = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (heartbeat) clearInterval(heartbeat);
+        fn();
+      };
+
+      const timerCallback = () => {
+        // Bug Fix: kill the entire process group (negative PID) instead of just the wrapper shell
+        if (child.pid) {
+          try { process.kill(-child.pid, 'SIGTERM'); } catch { /* ignore */ }
+        } else {
+          try { child.kill('SIGTERM'); } catch { /* ignore */ }
+        }
+        
+        // If the process ignores SIGTERM, escalate after 2 s
+        setTimeout(() => {
+          if (child.pid) {
+            try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already dead */ }
+          } else {
+            try { child.kill('SIGKILL'); } catch { /* already dead */ }
+          }
+        }, 2000).unref();
+        settle(() =>
+          reject(new Error(`CLI idle timeout after ${timeoutMs}ms`)),
+        );
+      };
+
+      let timer: NodeJS.Timeout;
+      const resetTimer = () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(timerCallback, timeoutMs);
+        timer.unref();
+      };
+      resetTimer();
+
+      // Collect stdout + stderr into a single buffer (matches old execSync behaviour)
+      // Capped at MAX_BUFFER to prevent OOM from runaway CLI output.
+      const appendOutput = (chunk: Buffer) => {
+        if (outputBytes >= MAX_BUFFER) return;
+        resetTimer(); // Keep alive on active output
+        const str = chunk.toString();
+        output += str;
+        outputBytes += chunk.length;
+      };
+      child.stdout?.on('data', appendOutput);
+      child.stderr?.on('data', appendOutput);
+
+      // Progress heartbeat every 3 s (only if a callback is registered)
+      // .unref() so the interval doesn't prevent Node.js exit
+      let elapsedMs = 0;
+      const heartbeat = this.progressCallback
+        ? setInterval(() => {
+            elapsedMs += 3000;
+            this.progressCallback?.(elapsedMs);
+          }, 3000)
+        : undefined;
+      heartbeat?.unref();
+
+      // Resolve on close (even non-zero exit — existing behaviour)
+      child.on('close', () => {
+        settle(() => resolve(output));
+      });
+
+      child.on('error', (err: Error) => {
+        settle(() => reject(err));
+      });
+    });
+  }
+
+  /**
+   * Streaming variant: yields stdout chunks as they arrive from the child process,
+   * then returns the complete accumulated output.
+   */
+  async *sendStreaming(args: string[], timeoutMs: number, env?: NodeJS.ProcessEnv): AsyncGenerator<string, string, unknown> {
+    const child: ChildProcess = spawn(
+      this.cliBin,
+      args,
+      {
+        env: env ? { ...process.env, ...env } : { ...process.env },
+        detached: true,
+      },
+    );
+
+    let output = '';
+    let outputBytes = 0;
+    let settled = false;
+    let resolveClose: (() => void) | null = null;
+    let rejectClose: ((err: Error) => void) | null = null;
+
+    // Buffer for incoming chunks that haven't been yielded yet
+    const pendingChunks: string[] = [];
+    let waitingForChunk: ((value: IteratorResult<string, string>) => void) | null = null;
+
+    const pushChunk = (str: string) => {
+      if (waitingForChunk) {
+        const resolve = waitingForChunk;
+        waitingForChunk = null;
+        resolve({ value: str, done: false });
+      } else {
+        pendingChunks.push(str);
+      }
+    };
+
+    const timerCallback = () => {
+      if (child.pid) {
+        try { process.kill(-child.pid, 'SIGTERM'); } catch { /* ignore */ }
+      } else {
+        try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      }
+      setTimeout(() => {
+        if (child.pid) {
+          try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already dead */ }
+        } else {
+          try { child.kill('SIGKILL'); } catch { /* already dead */ }
+        }
+      }, 2000).unref();
+      if (!settled) {
+        settled = true;
+        rejectClose?.(new Error(`CLI idle timeout after ${timeoutMs}ms`));
+      }
+    };
+
+    let timer: NodeJS.Timeout;
+    const resetTimer = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(timerCallback, timeoutMs);
+      timer.unref();
+    };
+    resetTimer();
+
+    const appendOutput = (chunk: Buffer) => {
+      if (outputBytes >= MAX_BUFFER) return;
+      resetTimer(); // Keep alive on active output
+      const str = chunk.toString();
+      output += str;
+      outputBytes += chunk.length;
+      pushChunk(str);
+    };
+    child.stdout?.on('data', appendOutput);
+    child.stderr?.on('data', appendOutput);
+
+    const closePromise = new Promise<void>((resolve, reject) => {
+      resolveClose = resolve;
+      rejectClose = reject;
+    });
+
+    child.on('close', () => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolveClose?.();
+      }
+      // Signal end to the generator
+      if (waitingForChunk) {
+        const resolve = waitingForChunk;
+        waitingForChunk = null;
+        resolve({ value: output, done: true });
+      }
+    });
+
+    child.on('error', (err: Error) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        rejectClose?.(err);
+      }
+    });
+
+    // Yield chunks as they arrive
+    try {
+      while (!settled) {
+        if (pendingChunks.length > 0) {
+          yield pendingChunks.shift()!;
+        } else {
+          // Wait for the next chunk or process close
+          const result = await new Promise<IteratorResult<string, string>>((resolve) => {
+            waitingForChunk = resolve;
+          });
+          if (result.done) {
+            return result.value;
+          }
+          yield result.value;
+        }
+      }
+    } finally {
+      // Drain remaining pending chunks
+      while (pendingChunks.length > 0) {
+        yield pendingChunks.shift()!;
+      }
+    }
+
+    // Wait for close and return full output
+    await closePromise;
+    return output;
+  }
+
+  dispose(): void {
+    this.progressCallback = undefined;
+  }
+}

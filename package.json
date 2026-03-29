@@ -1,0 +1,22 @@
+{
+  "name": "openclaw-trias-root",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "prestart": "node scripts/kill-ports.js",
+    "dev:gateway": "openclaw tui",
+    "dev:backend": "npm --workspace=backend run dev",
+    "dev:frontend": "npm --workspace=frontend run dev",
+    "start": "concurrently -k -p \"[{name}]\" -n \"GATEWAY,BACKEND,FRONTEND\" -c \"cyan,magenta,green\" \"npm run dev:gateway\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "clean": "npm --workspace=frontend run clean && npm --workspace=backend run clean"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "wait-on": "^9.0.4"
+  }
+}

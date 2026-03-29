@@ -1,0 +1,246 @@
+/* ─── Token Dashboard ─────────────────────────────────────────── */
+
+.token-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) 0;
+}
+
+.token-dashboard-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.token-dashboard-header .dashboard-icon {
+  font-size: 1rem;
+  opacity: 0.9;
+}
+
+.token-dashboard-header h3 {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+}
+
+.token-header-total {
+  margin-left: auto;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  background: linear-gradient(90deg, var(--color-legislative), var(--color-executive), var(--color-judicial));
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ─── Summary Cards ───────────────────────────────────────────── */
+
+.token-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--spacing-xs);
+}
+
+.token-summary-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: var(--spacing-sm);
+  text-align: center;
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.token-summary-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 6px 6px 0 0;
+}
+
+.token-summary-card.legislative::before {
+  background: var(--color-legislative);
+  box-shadow: 0 0 8px var(--color-legislative);
+}
+
+.token-summary-card.executive::before {
+  background: var(--color-executive);
+  box-shadow: 0 0 8px var(--color-executive);
+}
+
+.token-summary-card.judicial::before {
+  background: var(--color-judicial);
+  box-shadow: 0 0 8px var(--color-judicial);
+}
+
+.token-summary-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.token-card-label {
+  font-size: 0.6rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  margin-bottom: 2px;
+}
+
+.token-card-value {
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+}
+
+.token-summary-card.legislative .token-card-value {
+  color: var(--color-legislative);
+}
+
+.token-summary-card.executive .token-card-value {
+  color: var(--color-executive);
+}
+
+.token-summary-card.judicial .token-card-value {
+  color: var(--color-judicial);
+}
+
+/* ─── Total Bar ───────────────────────────────────────────────── */
+
+.token-total-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+}
+
+.token-total-label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+}
+
+.token-total-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  background: linear-gradient(90deg, var(--color-legislative), var(--color-executive), var(--color-judicial));
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ─── Chart Containers ────────────────────────────────────────── */
+
+.token-chart-section {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: var(--spacing-sm);
+}
+
+.token-chart-title {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  margin-bottom: var(--spacing-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.token-chart-title .chart-icon {
+  font-size: 0.85rem;
+}
+
+.token-chart-wrapper {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ─── Empty State ─────────────────────────────────────────────── */
+
+.token-empty-state {
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-align: center;
+  padding: var(--spacing-lg) var(--spacing-md);
+  opacity: 0.6;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.token-empty-icon {
+  font-size: 1.5rem;
+  margin-bottom: var(--spacing-sm);
+  display: block;
+}
+
+/* ─── Recharts Overrides ──────────────────────────────────────── */
+
+.token-dashboard .recharts-text {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+}
+
+.token-dashboard .recharts-legend-item-text {
+  font-family: var(--font-mono) !important;
+  font-size: 0.6rem !important;
+  color: var(--color-text-secondary) !important;
+}
+
+.token-dashboard .recharts-tooltip-wrapper {
+  z-index: 100;
+}
+
+/* Pulse animation for live data */
+@keyframes tokenPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.token-live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.55rem;
+  color: var(--color-accent-green);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.token-live-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-accent-green);
+  animation: tokenPulse 2s ease-in-out infinite;
+  box-shadow: 0 0 6px var(--color-accent-green);
+}
