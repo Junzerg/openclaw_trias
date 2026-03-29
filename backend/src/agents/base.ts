@@ -101,6 +101,67 @@ export abstract class BaseAgent {
   }
 
   /**
+   * Streaming variant of callLLM — yields chunks while emitting STREAM_CHUNK
+   * events to the bus for real-time frontend visualization.
+   *
+   * Throttles bus emissions to every ~150ms to avoid flooding the WebSocket.
+   */
+  protected async callLLMStreaming(prompt: string): Promise<LLMResponse> {
+    const heartbeat = this.startProgressHeartbeat();
+    let lastEmitTime = 0;
+    let pendingChunk = '';
+    const THROTTLE_MS = 150;
+
+    try {
+      const gen = this.adapter.callLLMStreaming(this.systemPrompt, prompt, this.modelRef);
+      let result: IteratorResult<string, LLMResponse>;
+
+      do {
+        result = await gen.next();
+
+        if (!result.done && result.value) {
+          pendingChunk += result.value;
+          const now = Date.now();
+
+          if (now - lastEmitTime >= THROTTLE_MS && pendingChunk.length > 0) {
+            lastEmitTime = now;
+            this.emitStreamChunk(pendingChunk, false);
+            pendingChunk = '';
+          }
+        }
+      } while (!result.done);
+
+      // Flush remaining chunk
+      if (pendingChunk.length > 0) {
+        this.emitStreamChunk(pendingChunk, false);
+      }
+
+      // Signal completion
+      this.emitStreamChunk('', true);
+
+      return result.value;
+    } finally {
+      clearInterval(heartbeat);
+    }
+  }
+
+  /**
+   * Emit a STREAM_CHUNK event to the message bus.
+   * Uses a lightweight 'streaming' topic that bypasses Ring Buffer history.
+   */
+  private emitStreamChunk(chunk: string, completed: boolean): void {
+    if (!this.bus) return;
+    this.bus.publish('streaming', {
+      action: EventAction.STREAM_CHUNK,
+      source_agent: this.role,
+      payload: { chunk, agent: this.role, completed },
+      timestamp: new Date(),
+      intensity: 0,
+      emotion: EmotionType.NEUTRAL,
+    }).catch(() => {});
+  }
+
+  /**
    * Publish `llm_thinking` heartbeat events every 3 s while an LLM call is in flight.
    * Allows frontends to show "thinking…" indicators and detect stalled calls.
    */

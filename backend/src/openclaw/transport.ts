@@ -15,6 +15,12 @@ export interface ITransport {
   send(args: string[], timeoutMs: number, env?: NodeJS.ProcessEnv): Promise<string>;
 
   /**
+   * Send a command and yield stdout chunks as they arrive (streaming mode).
+   * Falls back to a single-chunk yield of the complete output if not implemented.
+   */
+  sendStreaming?(args: string[], timeoutMs: number, env?: NodeJS.ProcessEnv): AsyncGenerator<string, string, unknown>;
+
+  /**
    * Register a progress callback. Called every ~3 s while a command is running.
    * Useful for pushing heartbeat events during long LLM calls.
    */
@@ -123,6 +129,127 @@ export class CliTransport implements ITransport {
         settle(() => reject(err));
       });
     });
+  }
+
+  /**
+   * Streaming variant: yields stdout chunks as they arrive from the child process,
+   * then returns the complete accumulated output.
+   */
+  async *sendStreaming(args: string[], timeoutMs: number, env?: NodeJS.ProcessEnv): AsyncGenerator<string, string, unknown> {
+    const child: ChildProcess = spawn(
+      this.cliBin,
+      args,
+      {
+        env: env ? { ...process.env, ...env } : { ...process.env },
+        detached: true,
+      },
+    );
+
+    let output = '';
+    let outputBytes = 0;
+    let settled = false;
+    let resolveClose: (() => void) | null = null;
+    let rejectClose: ((err: Error) => void) | null = null;
+
+    // Buffer for incoming chunks that haven't been yielded yet
+    const pendingChunks: string[] = [];
+    let waitingForChunk: ((value: IteratorResult<string, string>) => void) | null = null;
+
+    const pushChunk = (str: string) => {
+      if (waitingForChunk) {
+        const resolve = waitingForChunk;
+        waitingForChunk = null;
+        resolve({ value: str, done: false });
+      } else {
+        pendingChunks.push(str);
+      }
+    };
+
+    const appendOutput = (chunk: Buffer) => {
+      if (outputBytes >= MAX_BUFFER) return;
+      const str = chunk.toString();
+      output += str;
+      outputBytes += chunk.length;
+      pushChunk(str);
+    };
+
+    child.stdout?.on('data', appendOutput);
+    child.stderr?.on('data', appendOutput);
+
+    // Timeout protection
+    const timer = setTimeout(() => {
+      if (child.pid) {
+        try { process.kill(-child.pid, 'SIGTERM'); } catch { /* ignore */ }
+      } else {
+        try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      }
+      setTimeout(() => {
+        if (child.pid) {
+          try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already dead */ }
+        } else {
+          try { child.kill('SIGKILL'); } catch { /* already dead */ }
+        }
+      }, 2000).unref();
+      if (!settled) {
+        settled = true;
+        rejectClose?.(new Error(`CLI timeout after ${timeoutMs}ms`));
+      }
+    }, timeoutMs);
+    timer.unref();
+
+    const closePromise = new Promise<void>((resolve, reject) => {
+      resolveClose = resolve;
+      rejectClose = reject;
+    });
+
+    child.on('close', () => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolveClose?.();
+      }
+      // Signal end to the generator
+      if (waitingForChunk) {
+        const resolve = waitingForChunk;
+        waitingForChunk = null;
+        resolve({ value: output, done: true });
+      }
+    });
+
+    child.on('error', (err: Error) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        rejectClose?.(err);
+      }
+    });
+
+    // Yield chunks as they arrive
+    try {
+      while (!settled) {
+        if (pendingChunks.length > 0) {
+          yield pendingChunks.shift()!;
+        } else {
+          // Wait for the next chunk or process close
+          const result = await new Promise<IteratorResult<string, string>>((resolve) => {
+            waitingForChunk = resolve;
+          });
+          if (result.done) {
+            return result.value;
+          }
+          yield result.value;
+        }
+      }
+    } finally {
+      // Drain remaining pending chunks
+      while (pendingChunks.length > 0) {
+        yield pendingChunks.shift()!;
+      }
+    }
+
+    // Wait for close and return full output
+    await closePromise;
+    return output;
   }
 
   dispose(): void {

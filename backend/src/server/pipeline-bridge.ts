@@ -111,6 +111,28 @@ export function createWsBridge(wsManager: IConnectionManager): Handler {
   };
 }
 
+/**
+ * 创建轻量级流式 WS 桥接处理器 — 将 STREAM_CHUNK 事件直接通过 broadcastDirect 转发，
+ * 不进入 Ring Buffer、不分配 event_id、不持久化到数据库。
+ */
+export function createStreamingBridge(wsManager: IConnectionManager): Handler {
+  return async function _streamBridge(event: BaseEvent): Promise<void> {
+    if (!event.task_id) return;
+
+    try {
+      const wsPayload = serializeEvent(event);
+      if ('broadcastDirect' in wsManager && typeof wsManager.broadcastDirect === 'function') {
+        await wsManager.broadcastDirect(event.task_id, wsPayload);
+      } else {
+        // Fallback to normal broadcast if broadcastDirect not available
+        await wsManager.broadcast(event.task_id, wsPayload);
+      }
+    } catch {
+      // Silently ignore streaming errors to avoid disrupting the pipeline
+    }
+  };
+}
+
 // ─── DB Bridge ────────────────────────────────────────────────
 
 /**
@@ -257,7 +279,11 @@ export async function initLifecycle(state: AppState): Promise<() => Promise<void
     state.government.bus.subscribe(topic, dbBridge);
   }
 
-  console.log('[Lifecycle] Pipeline 桥接已注册，双通道就绪');
+  // 流式事件专用桥接 — 轻量级直通，不进 Ring Buffer / DB
+  const streamingBridge = createStreamingBridge(state.wsManager);
+  state.government.bus.subscribe('streaming', streamingBridge);
+
+  console.log('[Lifecycle] Pipeline 桥接已注册，双通道+流式隧道就绪');
 
   // 返回关闭函数
   return async function shutdownLifecycle(): Promise<void> {

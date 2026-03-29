@@ -189,6 +189,48 @@ export class ConnectionManager implements IConnectionManager {
   }
 
   /**
+   * Task 4.14: 轻量级直接广播 — 用于高频流式事件 (STREAM_CHUNK)。
+   *
+   * 与 broadcast() 的区别：
+   * - 不分配 event_id（不参与断线重连的 replay 补发）
+   * - 不写入 Ring Buffer（不占用历史缓存空间）
+   * - 不更新 _lastActive（不影响 GC 定时器）
+   *
+   * 这确保极高频的 Token 流不会把重要的业务事件挤出 Ring Buffer。
+   */
+  async broadcastDirect(taskId: string, payload: Record<string, unknown>): Promise<void> {
+    const conns = this._connections.get(taskId);
+    if (!conns || conns.size === 0) return;
+
+    let message: string;
+    try {
+      message = JSON.stringify(payload);
+    } catch {
+      return;
+    }
+
+    const snapshot = [...conns];
+    for (const ws of snapshot) {
+      if (ws.readyState !== ws.OPEN) {
+        this.disconnect(taskId, ws);
+        continue;
+      }
+
+      // Same slow-reader protection as broadcast
+      if (ws.bufferedAmount > 512 * 1024) {
+        console.warn('[WS] Slow reader detected during streaming (task=%j). Terminating.', taskId);
+        ws.terminate();
+        this.disconnect(taskId, ws);
+        continue;
+      }
+
+      ws.send(message, (err) => {
+        if (err) this.disconnect(taskId, ws);
+      });
+    }
+  }
+
+  /**
    * Task 4.8: 查询指定 task 在 afterEventId 之后的所有缓冲事件。
    *
    * 用于断线重连后的事件补发（Replay）。

@@ -1,9 +1,21 @@
 import { BaseScene } from './BaseScene';
 import Phaser from 'phaser';
 import { soundManager } from '../SoundManager';
+import { streamChunkBus } from '../../hooks/useWebSocket';
+import type { Subscription } from 'rxjs';
 
 export class ExecutiveScene extends BaseScene {
   private bill!: Phaser.GameObjects.Sprite;
+
+  // Task 4.14: Cyber terminal for real-time LLM streaming
+  private terminalBg!: Phaser.GameObjects.Rectangle;
+  private terminalText!: Phaser.GameObjects.Text;
+  private terminalLabel!: Phaser.GameObjects.Text;
+  private terminalContent: string = '';
+  private streamSub?: Subscription;
+  private terminalVisible: boolean = false;
+  private readonly TERMINAL_MAX_LINES = 18;
+  private readonly TERMINAL_MAX_CHARS = 2000;
 
   constructor() {
     super('ExecutiveScene');
@@ -36,6 +48,18 @@ export class ExecutiveScene extends BaseScene {
     g.generateTexture('smoke_particle', 8, 8);
     g.destroy();
 
+    // ── Task 4.14: Create cyber terminal overlay ──────────────────
+    this.createCyberTerminal();
+    this.subscribeToStreamChunks();
+
+    // Clean up subscription when scene shuts down
+    this.events.on('shutdown', () => {
+      this.streamSub?.unsubscribe();
+      this.streamSub = undefined;
+      this.terminalVisible = false;
+      this.terminalContent = '';
+    });
+
     // Test shortcuts
     this.input.keyboard?.on('keydown-T', () => {
       this.triggerToolCall('Checking system status...\nFound 3 anomalies.\nResolving node config.\nWait...\nProcess finished with exit code 0.');
@@ -49,6 +73,132 @@ export class ExecutiveScene extends BaseScene {
     this.input.keyboard?.on('keydown-E', () => {
       this.triggerError();
     });
+  }
+
+  /**
+   * Task 4.14: Create the cyber terminal UI elements (hidden by default).
+   */
+  private createCyberTerminal(): void {
+    const { width, height } = this.scale;
+    const termW = Math.min(width * 0.85, 620);
+    const termH = Math.min(height * 0.55, 320);
+    const termX = width / 2;
+    const termY = height * 0.52;
+
+    // Semi-transparent dark background
+    this.terminalBg = this.add.rectangle(termX, termY, termW, termH, 0x000000, 0.85)
+      .setStrokeStyle(1, 0x00ff88, 0.6)
+      .setOrigin(0.5)
+      .setVisible(false)
+      .setDepth(50);
+
+    // Header label
+    this.terminalLabel = this.add.text(termX - termW / 2 + 10, termY - termH / 2 + 4, '▶ LLM GENERATING...', {
+      fontSize: '10px',
+      color: '#00ff88',
+      fontFamily: 'monospace',
+      backgroundColor: 'rgba(0,0,0,0)',
+    }).setOrigin(0, 0).setVisible(false).setDepth(51);
+
+    // Scrolling content
+    this.terminalText = this.add.text(termX - termW / 2 + 10, termY - termH / 2 + 18, '', {
+      fontSize: '11px',
+      color: '#00ff44',
+      fontFamily: 'monospace',
+      wordWrap: { width: termW - 20, useAdvancedWrap: true },
+      lineSpacing: 2,
+    }).setOrigin(0, 0).setVisible(false).setDepth(51);
+  }
+
+  /**
+   * Task 4.14: Subscribe to the streamChunkBus and push tokens to the terminal.
+   */
+  private subscribeToStreamChunks(): void {
+    this.streamSub = streamChunkBus.subscribe((event) => {
+      if (event.completed) {
+        // Streaming finished — fade out the terminal after a short delay
+        this.time.delayedCall(1500, () => {
+          this.hideCyberTerminal();
+        });
+        return;
+      }
+
+      if (!this.terminalVisible) {
+        this.showCyberTerminal();
+      }
+
+      // Append chunk to terminal content
+      this.terminalContent += event.chunk;
+
+      // Truncate to prevent memory issues
+      if (this.terminalContent.length > this.TERMINAL_MAX_CHARS) {
+        this.terminalContent = this.terminalContent.slice(-this.TERMINAL_MAX_CHARS);
+      }
+
+      // Keep only the last N lines
+      const lines = this.terminalContent.split('\n');
+      if (lines.length > this.TERMINAL_MAX_LINES) {
+        this.terminalContent = lines.slice(-this.TERMINAL_MAX_LINES).join('\n');
+      }
+
+      // Update the Phaser text object directly (no React involved)
+      if (this.terminalText?.active) {
+        this.terminalText.setText(this.terminalContent);
+      }
+    });
+  }
+
+  private showCyberTerminal(): void {
+    this.terminalVisible = true;
+    this.terminalContent = '';
+    this.terminalBg?.setVisible(true);
+    this.terminalLabel?.setVisible(true);
+    this.terminalText?.setVisible(true).setText('');
+
+    // Fade in
+    if (this.terminalBg) {
+      this.terminalBg.setAlpha(0);
+      this.tweens.add({ targets: this.terminalBg, alpha: 1, duration: 300 });
+    }
+    if (this.terminalLabel) {
+      this.terminalLabel.setAlpha(0);
+      this.tweens.add({ targets: this.terminalLabel, alpha: 1, duration: 300 });
+    }
+    if (this.terminalText) {
+      this.terminalText.setAlpha(0);
+      this.tweens.add({ targets: this.terminalText, alpha: 1, duration: 300 });
+    }
+
+    // Typing sound loop
+    this.time.addEvent({
+      delay: 120,
+      callback: () => {
+        if (this.terminalVisible) {
+          soundManager.play('typewriter', { volume: 0.3 });
+        }
+      },
+      loop: true,
+      callbackScope: this,
+    });
+  }
+
+  private hideCyberTerminal(): void {
+    this.terminalVisible = false;
+
+    const targets = [this.terminalBg, this.terminalLabel, this.terminalText].filter(Boolean);
+    if (targets.length > 0) {
+      this.tweens.add({
+        targets,
+        alpha: 0,
+        duration: 500,
+        onComplete: () => {
+          this.terminalBg?.setVisible(false);
+          this.terminalLabel?.setVisible(false);
+          this.terminalText?.setVisible(false);
+          this.terminalContent = '';
+        },
+      });
+    }
   }
 
   public triggerSign(actName: string): Promise<void> {

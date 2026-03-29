@@ -13,6 +13,7 @@ export enum EventAction {
   STATE_CHANGE = 'state_change',
   LLM_THINKING = 'llm_thinking',
   TOKEN_USAGE = 'token_usage',
+  STREAM_CHUNK = 'stream_chunk',
 }
 
 export enum EmotionType {
@@ -84,3 +85,13 @@ export const TokenUsageEventSchema = BaseEventSchema.extend({
   }),
 });
 export type TokenUsageEvent = z.infer<typeof TokenUsageEventSchema>;
+
+export const StreamChunkEventSchema = BaseEventSchema.extend({
+  action: z.literal(EventAction.STREAM_CHUNK).default(EventAction.STREAM_CHUNK),
+  payload: z.object({
+    chunk: z.string().describe('本次收到的文本片段'),
+    agent: z.string().describe('正在生成的 Agent 角色名'),
+    completed: z.boolean().default(false).describe('是否已完成生成'),
+  }),
+});
+export type StreamChunkEvent = z.infer<typeof StreamChunkEventSchema>;

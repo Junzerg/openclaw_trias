@@ -209,6 +209,61 @@ export class OpenClawAdapter {
   }
 
   /**
+   * Streaming variant of callLLM — yields text chunks as the LLM generates them.
+   *
+   * Each `yield` is a raw stdout fragment from the CLI subprocess.
+   * The final `return` value is the complete extracted LLM content string.
+   *
+   * Usage:
+   * ```ts
+   * const gen = adapter.callLLMStreaming(sys, msg);
+   * for await (const chunk of gen) { onChunk(chunk); }
+   * // gen.return value = full content
+   * ```
+   */
+  async *callLLMStreaming(
+    systemPrompt: string,
+    userMessage: string,
+    model?: string,
+  ): AsyncGenerator<string, LLMResponse, unknown> {
+    const fullMessage = [
+      '=== SYSTEM INSTRUCTIONS (follow these strictly) ===',
+      systemPrompt,
+      '',
+      '=== USER MESSAGE ===',
+      userMessage,
+    ].join('\n');
+
+    const args = ['agent', '--agent', this.config.agentId, '--message', fullMessage];
+
+    const effectiveModel = model ?? this.config.defaultModel;
+    const envOverride: NodeJS.ProcessEnv = {};
+    if (effectiveModel) {
+      envOverride.OPENCLAW_MODEL = effectiveModel;
+    }
+
+    // Use streaming transport if available, otherwise simulate with full call
+    if (this.transport.sendStreaming) {
+      const gen = this.transport.sendStreaming(args, this.config.timeoutSeconds * 1000, envOverride);
+      let fullOutput = '';
+      
+      for await (const chunk of gen) {
+        fullOutput += chunk;
+        yield chunk;
+      }
+      
+      // Extract useful content from accumulated output
+      const content = this.extractLLMContent(fullOutput);
+      return { content, rawOutput: fullOutput };
+    } else {
+      // Fallback: call LLM normally and yield the entire result as one chunk
+      const result = await this.callLLM(systemPrompt, userMessage, model);
+      yield result.content;
+      return result;
+    }
+  }
+
+  /**
    * Extract meaningful LLM content from CLI stdout.
    *
    * The `openclaw agent` CLI may include status lines, thinking indicators,

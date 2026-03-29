@@ -5,6 +5,13 @@ import { useApi } from './useApi';
 
 export const wsEventBus = new Subject<WSEventPayload>();
 
+/**
+ * Task 4.14: Dedicated high-frequency stream for LLM token chunks.
+ * Completely bypasses React state (no dispatch, no useReducer).
+ * Subscribe directly from Phaser scenes or raw DOM elements.
+ */
+export const streamChunkBus = new Subject<{ chunk: string; agent: string; completed: boolean }>();
+
 // ─── Task 4.8: 连接状态枚举 ────────────────────────────────────────
 export type WsConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'offline';
 
@@ -38,6 +45,17 @@ export function useWebSocket(taskId?: string) {
   const attemptRef = useRef<number>(0);
 
   const processPayload = useCallback((payload: any) => {
+    // Task 4.14: Short-circuit stream_chunk events to dedicated bus — no React state touch
+    if (payload.action === 'stream_chunk') {
+      const p = payload.payload || payload;
+      streamChunkBus.next({
+        chunk: p.chunk || '',
+        agent: p.agent || payload.source_agent || 'unknown',
+        completed: !!p.completed,
+      });
+      return;
+    }
+
     if (payload.action === 'status_update' || payload.action === 'state_change') {
       const wsData = payload.data || {};
       const effectiveStatus = payload.state || wsData.state || payload.bill_state || wsData.bill_state || payload.status || wsData.status;

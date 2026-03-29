@@ -43,8 +43,8 @@ ${description}
 3. 代码应在 30 秒内完成执行
 4. 不要使用需要用户交互的代码（如 input()）`;
 
-    // Attempt 1
-    const result = await this.callLLM(prompt);
+    // Attempt 1 — use streaming so tokens appear in real-time on frontend
+    const result = await this.callLLMStreaming(prompt);
     const extracted = this._extractCodeFromLLM(result.content);
 
     // If we got a valid JSON extraction (not a fallback), return immediately

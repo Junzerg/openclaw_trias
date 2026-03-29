@@ -6,7 +6,7 @@
 
 import { BaseEvent } from '../schemas/events';
 
-export type Topic = 'legislation' | 'execution' | 'judiciary' | 'lifecycle';
+export type Topic = 'legislation' | 'execution' | 'judiciary' | 'lifecycle' | 'streaming';
 
 const MAX_EVENT_LOG_SIZE = 10_000;
 
