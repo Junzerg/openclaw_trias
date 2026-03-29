@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: openclaw/gateway:latest
+    container_name: openclaw-gateway
+    ports:
+      - "18789:18789"
+    volumes:
+      # Mount the persistent data directory for OpenClaw config/state
+      - ./.openclaw:/root/.openclaw
+    # CMD is already defined in the root Dockerfile as ["python", "-m", "openclaw_republic"]
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: openclaw-backend
+    environment:
+      # Instruct the TS backend to dispatch LLM calls to the gateway container
+      - OPENCLAW_URL=ws://gateway:18789
+      # Pass through Anthropic API Key or other LLM keys
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ZHIPU_API_KEY=${ZHIPU_API_KEY:-}
+    depends_on:
+      - gateway
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: openclaw-frontend
+    ports:
+      - "80:80"        # Map standard HTTP to the host
+      - "8080:80"      # Also allow 8080 just in case 80 is privileged/taken
+    depends_on:
+      - backend
+    restart: unless-stopped

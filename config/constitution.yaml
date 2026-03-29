@@ -1,0 +1,79 @@
+version: "1.0"
+
+# 司法审查规则
+judicial:
+  # 命令黑名单 — 行政分支执行时，这些命令触发违宪
+  blacklist_commands:
+    - "rm -rf"
+    - "DROP TABLE"
+    - "FORMAT"
+    - "deltree"
+    - "mkfs"
+    - "dd if="
+    - ":(){ :|:& };:" # Fork bomb
+    - "chmod -R 777"
+    - "> /dev/sda"
+
+  # Token 预算
+  token_budget:
+    max_per_task: 100000
+    debate_budget: 30000
+    execution_budget: 50000
+    review_budget: 20000
+
+  # 辩论规则
+  debate:
+    max_rounds: 10
+    conflict_threshold: 80
+    consensus_threshold: 30
+    min_rounds: 2
+
+  # 产出偏离度
+  deviation:
+    max_score: 0.3
+
+# 安全沙箱
+security:
+  sandbox_enabled: true
+  allowed_file_extensions:
+    - ".py"
+    - ".js"
+    - ".ts"
+    - ".md"
+    - ".json"
+    - ".yaml"
+    - ".yml"
+    - ".toml"
+    - ".txt"
+    - ".html"
+    - ".css"
+  max_execution_time_seconds: 300
+  max_file_size_mb: 10
+  network_access: restricted
+
+# 权限矩阵 (RBAC)
+rbac:
+  permissions:
+    - PLAN # 规划权 — 生成方案/法案
+    - EXECUTE # 执行权 — 调用工具/写代码
+    - MONITOR # 监控权 — 旁路监听
+    - VETO # 否决权 — 打回法案
+    - KILL # 熔断权 — 强制终止
+
+  role_permissions:
+    speaker: [PLAN]
+    radical_mp: [PLAN]
+    conservative_mp: [PLAN]
+    president: [PLAN, VETO]
+    sec_engineering: [EXECUTE]
+    sec_state: [EXECUTE]
+    chief_justice: [MONITOR, KILL]
+
+# 模型路由（可选 — 允许不同 Agent 使用不同 LLM 模型）
+# 整段缺失时，所有 Agent 使用 adapter.config.defaultModel
+model_routing:
+  default: "zai/glm-5"
+  overrides:
+    chief_justice: "zai/glm-5"
+    radical_mp: "zai/glm-5"
+    conservative_mp: "zai/glm-5"
